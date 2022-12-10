@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Send inventory data
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,36 +22,21 @@
 
 namespace Protocol\Message;
 
+use Model\Client\Client;
+use Protocol\Message\InventoryRequest\Content;
+
 /**
  * Send inventory data
  */
 class InventoryRequest extends \Library\DomDocument
 {
-    /**
-     * Map of item types to section names
-     * @var string[]
-     */
-    protected static $_itemSections = array(
-        'controller' => 'CONTROLLERS',
-        'cpu' => 'CPUS',
-        'filesystem' => 'DRIVES',
-        'inputdevice' => 'INPUTS',
-        'memoryslot' => 'MEMORIES',
-        'modem' => 'MODEMS',
-        'display' => 'MONITORS',
-        'networkinterface' => 'NETWORKS',
-        'msofficeproduct' => 'OFFICEPACK',
-        'port' => 'PORTS',
-        'printer' => 'PRINTERS',
-        'registrydata' => 'REGISTRY',
-        'sim' => 'SIM',
-        'extensionslot' => 'SLOTS',
-        'software' => 'SOFTWARES',
-        'audiodevice' => 'SOUNDS',
-        'storagedevice' => 'STORAGES',
-        'displaycontroller' => 'VIDEOS',
-        'virtualmachine' => 'VIRTUALMACHINES',
-    );
+    protected $content;
+
+    public function __construct(Content $content)
+    {
+        parent::__construct();
+        $this->content = $content;
+    }
 
     /** {@inheritdoc} */
     public function getSchemaFilename()
@@ -62,86 +48,18 @@ class InventoryRequest extends \Library\DomDocument
      * Load document tree from a client object
      *
      * @param \Model\Client\Client $client Client data source
-     * @param \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator Service manager
      */
-    public function loadClient(
-        \Model\Client\Client $client,
-        \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator
-    )
+    public function loadClient(Client $client)
     {
-        $itemManager = $serviceLocator->get('Model\Client\ItemManager');
-
         // Root element
-        $request = $this->createElement('REQUEST');
-        $this->appendChild($request);
+        $request = $this->createRoot('REQUEST');
         // Additional elements
-        $request->appendChild($this->createElementWithContent('DEVICEID', $client['ClientId']));
-        $request->appendChild($this->createElement('QUERY', 'INVENTORY'));
+        $request->appendElement('DEVICEID', $client['IdString'], true);
+        $request->appendElement('QUERY', 'INVENTORY');
         // Main inventory section
-        $content = $this->createElement('CONTENT');
-        $request->appendChild($content);
-
-        $sections = array('HARDWARE' => 'ClientsHardware', 'BIOS' => 'ClientsBios');
-        foreach ($sections as $section => $hydratorName) {
-            $data = $serviceLocator->get("Protocol\Hydrator\\$hydratorName")->extract($client);
-            ksort($data);
-            $element = $this->createElement($section);
-            foreach ($data as $name => $value) {
-                if ((string) $value != '') {
-                    $element->appendChild($this->createElementWithContent($name, $value));
-                }
-            }
-            if ($element->hasChildNodes()) {
-                $content->appendChild($element);
-            }
-        }
-        // ACCOUNTINFO section
-        foreach ($client['CustomFields'] as $property => $value) {
-            if ($value instanceof \DateTime) {
-                $value = $value->format('Y-m-d');
-            }
-            if ((string) $value != '') {
-                $element = $this->createElement('ACCOUNTINFO');
-                $element->appendChild(
-                    $this->createElementWithContent('KEYNAME', $property)
-                );
-                $element->appendChild(
-                    $this->createElementWithContent('KEYVALUE', $value)
-                );
-                $content->appendChild($element);
-            }
-        }
-        // DOWNLOAD section
-        $packages = $client->getDownloadedPackageIds();
-        if ($packages) {
-            // DOWNLOAD section has 1 HISTORY element with 1 PACKAGE element per package.
-            $download = $this->createElement('DOWNLOAD');
-            $content->appendChild($download);
-            $history = $this->createElement('HISTORY');
-            $download->appendChild($history);
-            foreach ($packages as $id) {
-                $package = $this->createElement('PACKAGE');
-                $package->setAttribute('ID', $id);
-                $history->appendChild($package);
-            }
-        }
-        // Item sections
-        foreach (self::$_itemSections as $type => $section) {
-            $items = $client->getItems($type, 'id', 'asc');
-            if ($items) {
-                $table = $itemManager->getTableName($type);
-                $hydrator = $serviceLocator->get("Protocol\\Hydrator\\$table");
-                foreach ($items as $object) {
-                    $element = $this->createElement($section);
-                    foreach ($hydrator->extract($object) as $name => $value) {
-                        if ((string) $value != '') {
-                            $element->appendChild($this->createElementWithContent($name, $value));
-                        }
-                    }
-                    $content->appendChild($element);
-                }
-            }
-        }
+        $request->appendChild($this->content);
+        $this->content->setClient($client);
+        $this->content->appendSections();
     }
 
     /**

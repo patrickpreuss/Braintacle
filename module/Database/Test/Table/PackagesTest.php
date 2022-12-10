@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Packages table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -28,13 +29,13 @@ class PackagesTest extends AbstractTest
 {
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testHydrator()
     {
         $hydrator = static::$_table->getHydrator();
-        $this->assertInstanceOf('Zend\Stdlib\Hydrator\ArraySerializable', $hydrator);
+        $this->assertInstanceOf(\Laminas\Hydrator\ArraySerializableHydrator::class, $hydrator);
 
         $map = $hydrator->getNamingStrategy();
         $this->assertInstanceOf('Database\Hydrator\NamingStrategy\MapNamingStrategy', $map);
@@ -46,9 +47,9 @@ class PackagesTest extends AbstractTest
         $this->assertEquals('Size', $map->hydrate('size'));
         $this->assertEquals('Platform', $map->hydrate('osname'));
         $this->assertEquals('Comment', $map->hydrate('comment'));
-        $this->assertEquals('NumNonnotified', $map->hydrate('num_nonnotified'));
+        $this->assertEquals('NumPending', $map->hydrate('num_pending'));
+        $this->assertEquals('NumRunning', $map->hydrate('num_running'));
         $this->assertEquals('NumSuccess', $map->hydrate('num_success'));
-        $this->assertEquals('NumNotified', $map->hydrate('num_notified'));
         $this->assertEquals('NumError', $map->hydrate('num_error'));
 
         $this->assertEquals('name', $map->extract('Name'));
@@ -58,16 +59,16 @@ class PackagesTest extends AbstractTest
         $this->assertEquals('size', $map->extract('Size'));
         $this->assertEquals('osname', $map->extract('Platform'));
         $this->assertEquals('comment', $map->extract('Comment'));
-        $this->assertEquals('num_nonnotified', $map->extract('NumNonnotified'));
+        $this->assertEquals('num_pending', $map->extract('NumPending'));
         $this->assertEquals('num_success', $map->extract('NumSuccess'));
-        $this->assertEquals('num_notified', $map->extract('NumNotified'));
+        $this->assertEquals('num_running', $map->extract('NumRunning'));
         $this->assertEquals('num_error', $map->extract('NumError'));
 
         $this->assertInstanceOf('Database\Hydrator\Strategy\Packages\Platform', $hydrator->getStrategy('Platform'));
         $this->assertInstanceOf('Database\Hydrator\Strategy\Packages\Platform', $hydrator->getStrategy('osname'));
 
         $resultSet = static::$_table->getResultSetPrototype();
-        $this->assertInstanceOf('Zend\Db\ResultSet\HydratingResultSet', $resultSet);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\HydratingResultSet', $resultSet);
         $this->assertEquals($hydrator, $resultSet->getHydrator());
     }
 }

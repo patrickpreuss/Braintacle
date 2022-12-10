@@ -1,8 +1,9 @@
 <?php
+
 /**
  * RegistryData item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -26,11 +27,10 @@ namespace Model\Client\Plugin;
  */
 class RegistryData extends DefaultPlugin
 {
-    /** {@inheritdoc} */
-    public function order($order, $direction)
+    public function order(?string $order, string $direction): void
     {
         parent::order($order, $direction);
-        if (key($this->_select->getRawState(\Zend\Db\Sql\Select::ORDER)) == 'registry.name') {
+        if (key($this->_select->getRawState(\Laminas\Db\Sql\Select::ORDER)) == 'registry.name') {
             // Since there can be multiple instances of Value, provide secondary
             // ordering by data
             $this->_select->order(array('registry.regvalue' => $direction));

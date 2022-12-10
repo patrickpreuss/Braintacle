@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator for clients
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -33,11 +34,11 @@ namespace Database\Hydrator;
  * - **registry_content**: result from a registry filter, converted to "Registry.Content" property.
  * - ***model*.*column***: result from an item filter, converted to "*Model*.*Property*" property.
  */
-class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
+class Clients implements \Laminas\Hydrator\HydratorInterface
 {
     /**
      * Service locator
-     * @var \Zend\ServiceManager\ServiceLocatorInterface
+     * @var \Laminas\ServiceManager\ServiceLocatorInterface
      */
     protected $_serviceLocator;
 
@@ -66,7 +67,7 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
         'bdate' => 'BiosDate',
         'bmanufacturer' => 'BiosManufacturer',
         'bversion' => 'BiosVersion',
-        'deviceid' => 'ClientId',
+        'deviceid' => 'IdString',
         'processors' => 'CpuClock',
         'processorn' => 'CpuCores',
         'processort' => 'CpuType',
@@ -78,9 +79,8 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
         'ipaddr' => 'IpAddress',
         'lastcome' => 'LastContactDate',
         'smanufacturer' => 'Manufacturer',
-        'smodel' => 'Model',
+        'smodel' => 'ProductName',
         'name' => 'Name',
-        'useragent' => 'OcsAgent',
         'description' => 'OsComment',
         'osname' => 'OsName',
         'osversion' => 'OsVersionNumber',
@@ -89,6 +89,7 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
         'ssn' => 'Serial',
         'swap' => 'SwapMemory',
         'type' => 'Type',
+        'useragent' => 'UserAgent',
         'userid' => 'UserName',
         'uuid' => 'Uuid',
     );
@@ -104,7 +105,7 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
         'BiosDate' => 'bdate',
         'BiosManufacturer' => 'bmanufacturer',
         'BiosVersion' => 'bversion',
-        'ClientId' => 'deviceid',
+        'IdString' => 'deviceid',
         'CpuClock' => 'processors',
         'CpuCores' => 'processorn',
         'CpuType' => 'processort',
@@ -116,17 +117,17 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
         'IpAddress' => 'ipaddr',
         'LastContactDate' => 'lastcome',
         'Manufacturer' => 'smanufacturer',
-        'Model' => 'smodel',
         'Name' => 'name',
-        'OcsAgent' => 'useragent',
         'OsComment' => 'description',
         'OsName' => 'osname',
         'OsVersionNumber' => 'osversion',
         'OsVersionString' => 'oscomments',
         'PhysicalMemory' => 'memory',
+        'ProductName' => 'smodel',
         'Serial' => 'ssn',
         'SwapMemory' => 'swap',
         'Type' => 'type',
+        'UserAgent' => 'useragent',
         'UserName' => 'userid',
         'Uuid' => 'uuid',
     );
@@ -134,12 +135,12 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
     /**
      * Constructor
      *
-     * @param \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator
+     * @param \Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->_serviceLocator = $serviceLocator;
-        $this->_encodingFilter = new \Library\Filter\FixEncodingErrors;
+        $this->_encodingFilter = new \Library\Filter\FixEncodingErrors();
         $this->_databaseTimeZone = new \DateTimeZone('UTC');
     }
 
@@ -156,16 +157,15 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
     /** {@inheritdoc} */
     public function hydrate(array $data, $object)
     {
-        $object->exchangeArray(array());
         foreach ($data as $name => $value) {
             $name = $this->hydrateName($name);
-            $object[$name] = $this->hydrateValue($name, $value);
+            $object->$name = $this->hydrateValue($name, $value);
         }
         return $object;
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
         $data = array();
         foreach ($object as $name => $value) {
@@ -294,7 +294,7 @@ class Clients implements \Zend\Stdlib\Hydrator\HydratorInterface
      * Extract value
      *
      * @param string $name
-     * @param string $value
+     * @param mixed $value
      * @return mixed
      */
     public function extractValue($name, $value)

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Manager for installed software (licenses, blacklists)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Model;
+
+use Laminas\Db\ResultSet\ResultSet;
 
 /**
  * Manager for installed software (licenses, blacklists)
@@ -63,8 +66,7 @@ class SoftwareManager
         \Database\Table\SoftwareDefinitions $softwareDefinitions,
         \Database\Table\WindowsInstallations $windowsInstallations,
         \Database\Table\WindowsProductKeys $windowsProductKeys
-    )
-    {
+    ) {
         $this->_software = $software;
         $this->_softwareDefinitions = $softwareDefinitions;
         $this->_windowsInstallations = $windowsInstallations;
@@ -93,21 +95,18 @@ class SoftwareManager
      * @param array $filters Associative array of filters. Default: none.
      * @param string $order One of "name" or "num_clients", default: "name"
      * @param string $direction Onde of "asc" or "desc", default: "asc"
-     * @return \Traversable Iterator producing array objects with "name" and "num_clients" keys
+     * @return ResultSet Result set producing arrays with "name" and "num_clients" keys
      */
-    public function getSoftware($filters=null, $order='name', $direction='asc')
+    public function getSoftware(array $filters = null, string $order = 'name', string $direction = 'asc'): ResultSet
     {
         $sql = $this->_software->getSql();
         $select = $sql->select();
         $select->columns(
             array(
                 'name',
-                'num_clients' => new \Zend\Db\Sql\Literal('COUNT(DISTINCT hardware_id)'),
+                'num_clients' => new \Laminas\Db\Sql\Literal('COUNT(DISTINCT hardware_id)'),
             )
         );
-
-        // Ignore software without name as this cannot even get blacklisted.
-        $select->where(new \Zend\Db\Sql\Predicate\IsNotNull('softwares.name'));
 
         if (is_array($filters)) {
             foreach ($filters as $filter => $search) {
@@ -117,11 +116,11 @@ class SoftwareManager
                             'hardware',
                             'hardware.id = hardware_id',
                             array(),
-                            \Zend\Db\Sql\Select::JOIN_INNER
+                            \Laminas\Db\Sql\Select::JOIN_INNER
                         );
                         switch ($search) {
                             case 'windows':
-                                $select->where(new \Zend\Db\Sql\Predicate\IsNotNull('winprodid'));
+                                $select->where(new \Laminas\Db\Sql\Predicate\IsNotNull('winprodid'));
                                 break;
                             case 'other':
                                 $select->where(array('winprodid' => null));
@@ -132,12 +131,6 @@ class SoftwareManager
                         break;
                     case 'Status':
                         if ($search != 'all') {
-                            $select->join(
-                                'software_definitions',
-                                'software_definitions.name = softwares.name',
-                                array(),
-                                \Zend\Db\Sql\Select::JOIN_LEFT
-                            );
                             switch ($search) {
                                 case 'accepted':
                                     $select->where(array('display' => 1));
@@ -159,21 +152,24 @@ class SoftwareManager
             }
         }
 
-        $select->group('softwares.name');
+        $select->group('software_installations.name');
 
         switch ($order) {
             case 'name':
-                $select->order(array('softwares.name' => $direction));
+                $select->order(['software_installations.name' => $direction]);
                 break;
             case 'num_clients':
-                $select->order(array('num_clients' => $direction, 'softwares.name' => 'asc'));
+                $select->order(['num_clients' => $direction, 'software_installations.name' => 'asc']);
                 break;
             default:
                 throw new \InvalidArgumentException('Invalid order column: ' . $order);
                 break;
         }
 
-        return $sql->prepareStatementForSqlObject($select)->execute();
+        // Wrap into a ResultSet to support buffering
+        $resultSet = new \Laminas\Db\ResultSet\ResultSet(\Laminas\Db\ResultSet\ResultSet::TYPE_ARRAY);
+        $resultSet->initialize($sql->prepareStatementForSqlObject($select)->execute());
+        return $resultSet;
     }
 
     /**
@@ -198,11 +194,11 @@ class SoftwareManager
     {
         $sql = $this->_windowsInstallations->getSql();
         $select = $sql->select();
-        $select->columns(array('num' => new \Zend\Db\Sql\Literal('COUNT(manual_product_key)')))
-               ->where(new \Zend\Db\Sql\Predicate\IsNotNull('manual_product_key'));
+        $select->columns(array('num' => new \Laminas\Db\Sql\Literal('COUNT(manual_product_key)')))
+               ->where(new \Laminas\Db\Sql\Predicate\IsNotNull('manual_product_key'));
         return $sql->getAdapter()->query(
             $sql->buildSqlString($select),
-            \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
+            \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
         )->current()['num'];
     }
 
@@ -218,7 +214,7 @@ class SoftwareManager
         if (empty($productKey) or $productKey == $client['Windows']['ProductKey']) {
             $productKey = null;
         } else {
-            $validator = new \Library\Validator\ProductKey;
+            $validator = new \Library\Validator\ProductKey();
             if (!$validator->isValid($productKey)) {
                 throw new \InvalidArgumentException(current($validator->getMessages()));
             }

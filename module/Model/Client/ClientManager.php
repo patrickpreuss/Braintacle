@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Client manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,47 +22,61 @@
 
 namespace Model\Client;
 
-use Zend\Db\Sql\Select;
-use Zend\Db\Sql\Predicate;
+use Laminas\Db\Sql\Select;
+use Laminas\Db\Sql\Predicate;
+use Model\Group\Group;
 
 /**
  * Client manager
  */
-class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
+class ClientManager
 {
-    use \Zend\ServiceManager\ServiceLocatorAwareTrait;
+    /**
+     * Service Locator
+     * @var \Laminas\ServiceManager\ServiceLocatorInterface
+     */
+    protected $_serviceLocator;
+
+    /**
+     * Constructor
+     *
+     * @param \Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator
+     */
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    {
+        $this->_serviceLocator = $serviceLocator;
+    }
 
     /**
      * Return clients matching criteria
      *
      * @param array $properties Properties to be returned. If empty or null, return all properties.
      * @param string $order Property to sort by
-     * @param string $direction One of [asc|desc]
+     * @param ?string $direction One of [asc|desc]
      * @param string|array $filter Name or array of names of a pre-defined filter routine
-     * @param string|array $search Search parameter(s) passed to the filter. May be case sensitive depending on DBMS.
+     * @param string|array|Group $search Search parameter(s) passed to the filter. May be case sensitive depending on DBMS.
      * @param string|array $operators Comparison operator(s)
      * @param bool|array $invert Invert query results (return clients not matching criteria)
      * @param bool $addSearchColumns Add columns with search criteria (default), otherwise only columns from $properties
      * @param bool $distinct Force distinct results.
-     * @param bool $query Perform query and return result set (default), return \Zend\Db\Sql\Select object otherwise.
-     * @return \Zend\Db\ResultSet\AbstractResultSet|\Zend\Db\Sql\Select Query result or Query object
+     * @param bool $query Perform query and return result set (default), return \Laminas\Db\Sql\Select object otherwise.
+     * @return \Laminas\Db\ResultSet\AbstractResultSet|\Laminas\Db\Sql\Select Query result or Query object
      * @throws \InvalidArgumentException if a filter or order column is invalid
      * @throws \LogicException if $invertResult is not supported by a filter or type of custom field is not supported
      */
     public function getClients(
-        $properties=null,
-        $order=null,
-        $direction='asc',
-        $filter=null,
-        $search=null,
-        $operators=null,
-        $invert=null,
-        $addSearchColumns=true,
-        $distinct=false,
-        $query=true
-    )
-    {
-        $clients = $this->serviceLocator->get('Database\Table\Clients');
+        $properties = null,
+        $order = null,
+        ?string $direction = 'asc',
+        $filter = null,
+        $search = null,
+        $operators = null,
+        $invert = null,
+        $addSearchColumns = true,
+        $distinct = false,
+        $query = true
+    ) {
+        $clients = $this->_serviceLocator->get('Database\Table\Clients');
         $map = $clients->getHydrator()->getExtractorMap();
 
         $fromClients = array();
@@ -72,7 +87,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             if (isset($map[$property])) {
                 $fromClients[] = $map[$property];
             } elseif (preg_match('/^Windows\.(.*)/', $property, $matches)) {
-                $column = $this->serviceLocator->get('Database\Table\WindowsInstallations')
+                $column = $this->_serviceLocator->get('Database\Table\WindowsInstallations')
                                                ->getHydrator()
                                                ->extractName($matches[1]);
                 $fromWindows["windows_$column"] = $column;
@@ -86,7 +101,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
 
         // Set up Select object manually instead of pulling it from a table
         // gateway because the base table might be changed later.
-        $sql = new \Zend\Db\Sql\Sql($this->serviceLocator->get('Db'));
+        $sql = new \Laminas\Db\Sql\Sql($this->_serviceLocator->get('Db'));
         $select = $sql->select();
         $select->from('clients');
         $select->columns($fromClients);
@@ -133,16 +148,16 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 case 'DnsServer':
                 case 'DefaultGateway':
                 case 'Manufacturer':
-                case 'Model':
                 case 'Name':
-                case 'OcsAgent':
                 case 'OsName':
                 case 'OsVersionNumber':
                 case 'OsVersionString':
                 case 'OsComment':
+                case 'ProductName':
                 case 'Serial':
+                case 'UserAgent':
                 case 'UserName':
-                    $select = $this->_filterByString(
+                    $select = $this->filterByString(
                         $select,
                         'Client',
                         $type,
@@ -156,7 +171,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 case 'CpuCores':
                 case 'PhysicalMemory':
                 case 'SwapMemory':
-                    $select = $this->_filterByOrdinal(
+                    $select = $this->filterByOrdinal(
                         $select,
                         'Client',
                         $type,
@@ -168,7 +183,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                     break;
                 case 'InventoryDate':
                 case 'LastContactDate':
-                    $select = $this->_filterByDate(
+                    $select = $this->filterByDate(
                         $select,
                         'Client',
                         $type,
@@ -178,14 +193,14 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                         $addSearchColumns
                     );
                     break;
-                case 'PackageNonnotified':
-                case 'PackageNotified':
+                case 'PackagePending':
+                case 'PackageRunning':
                 case 'PackageSuccess':
                 case 'PackageError':
                     if ($invertResult) {
                         throw new \LogicException("invertResult cannot be used on $type filter");
                     }
-                    $select = $this->_filterByPackage($select, $type, $arg, $addSearchColumns);
+                    $select = $this->filterByPackage($select, $type, $arg, $addSearchColumns);
                     break;
                 case 'Software':
                     if ($invertResult) {
@@ -194,10 +209,10 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                     $select
                         ->quantifier('DISTINCT')
                         ->join(
-                            'softwares',
-                            'softwares.hardware_id = clients.id',
+                            'software_installations',
+                            'software_installations.hardware_id = clients.id',
                             $addSearchColumns ? array('software_version' => 'version') : array()
-                        )->where(array('softwares.name' => $arg));
+                        )->where(['software_installations.name' => $arg]);
                     break;
                 case 'MemberOf':
                     if ($invertResult) {
@@ -242,7 +257,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 case 'Filesystem.FreeSpace':
                     // Generic integer filter
                     list($model, $property) = explode('.', $type);
-                    $select = $this->_filterByOrdinal(
+                    $select = $this->filterByOrdinal(
                         $select,
                         $model,
                         $property,
@@ -255,12 +270,12 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 default:
                     if (preg_match('#^CustomFields\\.(.*)#', $type, $matches)) {
                         $property = $matches[1];
-                        $fieldType = $this->serviceLocator->get('Model\Client\CustomFieldManager')
+                        $fieldType = $this->_serviceLocator->get('Model\Client\CustomFieldManager')
                                                           ->getFields()[$property];
                         switch ($fieldType) {
                             case 'text':
                             case 'clob':
-                                $select = $this->_filterByString(
+                                $select = $this->filterByString(
                                     $select,
                                     'CustomFields',
                                     $property,
@@ -272,7 +287,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                                 break;
                             case 'integer':
                             case 'float':
-                                $select = $this->_filterByOrdinal(
+                                $select = $this->filterByOrdinal(
                                     $select,
                                     'CustomFields',
                                     $property,
@@ -283,7 +298,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                                 );
                                 break;
                             case 'date':
-                                $select = $this->_filterByDate(
+                                $select = $this->filterByDate(
                                     $select,
                                     'CustomFields',
                                     $property,
@@ -298,7 +313,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                         }
                     } elseif (preg_match('/^Registry\\.(.+)/', $type, $matches)) {
                         $property = $matches[1];
-                        $select = $this->_filterByString(
+                        $select = $this->filterByString(
                             $select,
                             'Registry',
                             $property,
@@ -309,7 +324,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                         );
                     } elseif (preg_match('/^([a-zA-Z]+)\.([a-zA-Z]+)$/', $type, $matches)) {
                         // apply a generic string filter.
-                        $select = $this->_filterByString(
+                        $select = $this->filterByString(
                             $select,
                             $matches[1],
                             $matches[2],
@@ -331,10 +346,10 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             } elseif ($order == 'Membership') {
                 $order = 'groups_cache.static';
             } elseif (preg_match('/^CustomFields\\.(.+)/', $order, $matches)) {
-                $order = 'customfields_' . $this->serviceLocator->get('Model\Client\CustomFieldManager')
+                $order = 'customfields_' . $this->_serviceLocator->get('Model\Client\CustomFieldManager')
                                                                 ->getColumnMap()[$matches[1]];
             } elseif (preg_match('/^Windows\.(.+)/', $order, $matches)) {
-                $hydrator = $this->serviceLocator->get('Database\Table\WindowsInstallations')->getHydrator();
+                $hydrator = $this->_serviceLocator->get('Database\Table\WindowsInstallations')->getHydrator();
                 $order = 'windows_' . $hydrator->extractName($matches[1]);
             } elseif (preg_match('/^Registry\./', $order)) {
                 $order = 'registry_content';
@@ -342,13 +357,13 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 $model = $matches[1];
                 $property = $matches[2];
                 // Assume column alias 'model_column'
-                $tableGateway = $this->serviceLocator->get('Model\Client\ItemManager')->getTable($model);
+                $tableGateway = $this->_serviceLocator->get('Model\Client\ItemManager')->getTable($model);
                 $column = $tableGateway->getHydrator()->extractName($property);
                 $order = strtolower("{$model}_$column");
             } else {
                 throw new \InvalidArgumentException('Invalid order: ' . $order);
             }
-            $select->order(array($order => $direction));
+            $select->order([$order => $direction ?? 'asc']);
         }
 
         /*
@@ -360,7 +375,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
          * In that case, clients.id can be replaced by the 'hardware_id' or
          * 'client_id' column from the joined table.
         */
-        $joinedTables = $select->getRawState(Select::JOINS);
+        $joinedTables = $select->getRawState(Select::JOINS)->getJoins();
         $clientColumns = $select->getRawState(Select::COLUMNS);
         if (count($joinedTables) == 1 and $clientColumns == array('id')) {
             $joinedTable = $joinedTables[0];
@@ -417,16 +432,16 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
     /**
      * Apply a filter for a string value
      *
-     * @param \Zend\Db\Sql\Select $select Object to apply the filter to
+     * @param \Laminas\Db\Sql\Select $select Object to apply the filter to
      * @param string $model Model class (without namespace) containing property
      * @param string $property Property to search in
      * @param string $arg String to search for
      * @param bool $matchExact Disable wildcards ('*', '?', '%', '_') and substring search
      * @param bool $invertResult Return clients not matching criteria
      * @param bool $addSearchColumns Add columns with search criteria to Select object
-     * @return Zend\Db\Sql\Select Object with filter applied
+     * @return Select Object with filter applied
      */
-    protected function _filterByString(
+    protected function filterByString(
         $select,
         $model,
         $property,
@@ -434,10 +449,9 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
         $matchExact,
         $invertResult,
         $addSearchColumns
-    )
-    {
+    ) {
         $arg = (string) $arg; // Treat NULL as empty string
-        list($tableGateway, $column) = $this->_filter($select, $model, $property, $addSearchColumns);
+        list($tableGateway, $column) = $this->filter($select, $model, $property, $addSearchColumns);
         $table = $tableGateway->getTable();
 
         // Determine comparison operator and prepare search argument
@@ -448,12 +462,12 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             // If $arg contains '%' and '_', they are currently not escaped, i.e. they operate as wildcards too.
             // The result is encapsulated within '%' to support searching for arbitrary substrings.
             $arg = '%' . strtr($arg, '*?', '%_') . '%';
-            $operator = $this->serviceLocator->get('Database\Nada')->iLike();
+            $operator = $this->_serviceLocator->get('Database\Nada')->iLike();
         }
         $where = "$table.$column $operator ?";
         if ($invertResult) {
             // include NULL values
-            $where = "($where) IS NOT " . $this->serviceLocator->get('Database\Nada')->booleanLiteral(true);
+            $where = "($where) IS NOT " . $this->_serviceLocator->get('Database\Nada')->booleanLiteral(true);
         }
         $select->where(array($where => $arg));
 
@@ -463,17 +477,17 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
     /**
      * Apply a filter for an ordinal value (integer, float, ISO 8601 date string)
      *
-     * @param \Zend\Db\Sql\Select $select Object to apply the filter to
+     * @param \Laminas\Db\Sql\Select $select Object to apply the filter to
      * @param string $model Model class (without namespace) containing property
      * @param string $property Property to search in
      * @param string $arg Numeric operand (not validated!)
      * @param string $operator Comparison operator (eq|ne|lt|le|gt|ge)
      * @param bool $invertResult Return clients not matching criteria
      * @param bool $addSearchColumns Add columns with search criteria to Select object
-     * @return Zend\Db\Sql\Select Object with filter applied
+     * @return Select Object with filter applied
      * @throws \DomainException if $operator is invalid
      */
-    protected function _filterByOrdinal($select, $model, $property, $arg, $operator, $invertResult, $addSearchColumns)
+    protected function filterByOrdinal($select, $model, $property, $arg, $operator, $invertResult, $addSearchColumns)
     {
         // Convert abstract operator into SQL operator
         switch ($operator) {
@@ -499,12 +513,12 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 throw new \DomainException('Invalid comparison operator: ' . $operator);
         }
 
-        list($tableGateway, $column) = $this->_filter($select, $model, $property, $addSearchColumns);
+        list($tableGateway, $column) = $this->filter($select, $model, $property, $addSearchColumns);
 
         $where = $tableGateway->getTable() . ".$column $operator ?";
         if ($invertResult) {
             // include NULL values
-            $where = "($where) IS NOT " . $this->serviceLocator->get('Database\Nada')->booleanLiteral(true);
+            $where = "($where) IS NOT " . $this->_serviceLocator->get('Database\Nada')->booleanLiteral(true);
         }
         $select->where(array($where => $arg));
 
@@ -514,17 +528,17 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
     /**
      * Apply a filter for a date value
      *
-     * @param \Zend\Db\Sql\Select $select Object to apply the filter to
+     * @param \Laminas\Db\Sql\Select $select Object to apply the filter to
      * @param string $model Model class (without namespace) containing property
      * @param string $property Property to search in
      * @param mixed $arg Date operand (\DateTime object or 'yyyy-MM-dd' string). Time of day is ignored.
      * @param string $operator Comparison operator (eq|ne|lt|le|gt|ge)
      * @param bool $invertResult Return clients not matching criteria
      * @param bool $addSearchColumns Add columns with search criteria to Select object
-     * @return Zend\Db\Sql\Select Object with filter applied
+     * @return Select Object with filter applied
      * @throws \DomainException if $operator is invalid
      */
-    protected function _filterByDate($select, $model, $property, $arg, $operator, $invertResult, $addSearchColumns)
+    protected function filterByDate($select, $model, $property, $arg, $operator, $invertResult, $addSearchColumns)
     {
         if ($arg instanceof \DateTime) {
             $dayStart = $arg;
@@ -534,8 +548,14 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
 
         if ($model == 'CustomFields') {
             // For plain date columns a simple ordinal comparison is sufficient.
-            return $this->_filterByOrdinal(
-                $select, $model, $property, $dayStart->format('Y-m-d'), $operator, $invertResult, $addSearchColumns
+            return $this->filterByOrdinal(
+                $select,
+                $model,
+                $property,
+                $dayStart->format('Y-m-d'),
+                $operator,
+                $invertResult,
+                $addSearchColumns
             );
         }
 
@@ -549,7 +569,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
         // < 00:00:00 of the next day.
         // Other operations (<, >) are defined accordingly.
 
-        $nada = $this->serviceLocator->get('Database\Nada');
+        $nada = $this->_serviceLocator->get('Database\Nada');
 
         // Get beginning of day
         $dayStart->modify('midnight');
@@ -561,7 +581,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
         $dayStart = $dayStart->format($nada->timestampFormatPhp());
         $dayNext = $dayNext->format($nada->timestampFormatPhp());
 
-        list($tableGateway, $column) = $this->_filter($select, $model, $property, $addSearchColumns);
+        list($tableGateway, $column) = $this->filter($select, $model, $property, $addSearchColumns);
         $table = $tableGateway->getTable();
         $operand = "$table.$column";
 
@@ -597,7 +617,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             }
             // include NULL values
             $where = array(
-                "($conditions) IS NOT " . $this->serviceLocator->get('Database\Nada')->booleanLiteral(true) => $operands
+                "($conditions) IS NOT " . $this->_serviceLocator->get('Database\Nada')->booleanLiteral(true) => $operands
             );
         }
         $select->where($where);
@@ -608,23 +628,23 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
     /**
      * Apply a package filter
      *
-     * @param \Zend\Db\Sql\Select $select Object to apply the filter to
-     * @param string $filter PackageNonnotified|PackageSuccess|PackageNotified|PackageError
+     * @param \Laminas\Db\Sql\Select $select Object to apply the filter to
+     * @param string $filter PackagePending|PackageRunning|PackageSuccess|PackageError
      * @param string $package Package name
      * @param bool $addSearchColumns Add columns with search criteria (Package.Status)
-     * @return Zend\Db\Sql\Select Object with filter applied
+     * @return Select Object with filter applied
      */
-    protected function _filterByPackage($select, $filter, $package, $addSearchColumns)
+    protected function filterByPackage($select, $filter, $package, $addSearchColumns)
     {
         switch ($filter) {
-            case 'PackageNonnotified':
+            case 'PackagePending':
                 $condition = new Predicate\IsNull('devices.tvalue');
+                break;
+            case 'PackageRunning':
+                $condition = array('devices.tvalue' => \Model\Package\Assignment::RUNNING);
                 break;
             case 'PackageSuccess':
                 $condition = array('devices.tvalue' => \Model\Package\Assignment::SUCCESS);
-                break;
-            case 'PackageNotified':
-                $condition = array('devices.tvalue' => \Model\Package\Assignment::NOTIFIED);
                 break;
             case 'PackageError':
                 $condition = new Predicate\Like('devices.tvalue', \Model\Package\Assignment::ERROR_PREFIX . '%');
@@ -653,25 +673,25 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
      * This method determines the table and column to search and adds them to
      * $select if necessary.
      *
-     * @param \Zend\Db\Sql\Select $select Object to apply the filter to
+     * @param \Laminas\Db\Sql\Select $select Object to apply the filter to
      * @param string $model Model class (without namespace) containing property
      * @param string $property Property to search in
      * @param bool $addSearchColumns Add columns with search criteria
      * @return array Table gateway and column of search criteria
      */
-    protected function _filter($select, $model, $property, $addSearchColumns)
+    protected function filter($select, $model, $property, $addSearchColumns)
     {
         // Determine table name and column alias
         switch ($model) {
             case 'Client':
                 $table = 'Clients';
-                $hydrator = $this->serviceLocator->get('Database\Table\Clients')->getHydrator();
+                $hydrator = $this->_serviceLocator->get('Database\Table\Clients')->getHydrator();
                 $column = $hydrator->extractName($property);
                 $columnAlias = $column;
                 break;
             case 'CustomFields':
                 $table = 'CustomFields';
-                $column = $this->serviceLocator->get('Model\Client\CustomFieldManager')->getColumnMap()[$property];
+                $column = $this->_serviceLocator->get('Model\Client\CustomFieldManager')->getColumnMap()[$property];
                 $columnAlias = 'customfields_' . $column;
                 $fk = 'hardware_id';
                 break;
@@ -684,20 +704,20 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 break;
             case 'Windows':
                 $table = 'WindowsInstallations';
-                $hydrator = $this->serviceLocator->get('Database\Table\WindowsInstallations')->getHydrator();
+                $hydrator = $this->_serviceLocator->get('Database\Table\WindowsInstallations')->getHydrator();
                 $column = $hydrator->extractName($property);
                 $columnAlias = 'windows_' . $column;
                 $fk = 'client_id';
                 break;
             default:
-                $tableGateway = $this->serviceLocator->get('Model\Client\ItemManager')->getTable($model);
+                $tableGateway = $this->_serviceLocator->get('Model\Client\ItemManager')->getTable($model);
                 $column = $tableGateway->getHydrator()->extractName($property);
                 $columnAlias = strtolower($model) . '_' . $column;
                 $fk = 'hardware_id';
         }
 
         if (!isset($tableGateway)) {
-            $tableGateway = $this->serviceLocator->get("Database\Table\\$table");
+            $tableGateway = $this->_serviceLocator->get("Database\Table\\$table");
         }
         $table = $tableGateway->getTable();
 
@@ -713,7 +733,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
         } else {
             // Join table if not already present
             $rewriteJoins = false;
-            $joinedTables = $select->getRawState(Select::JOINS);
+            $joinedTables = $select->getRawState(Select::JOINS)->getJoins();
             $tablePresent = false;
             foreach ($joinedTables as $joinedTable) {
                 if ($joinedTable['name'] == $table) {
@@ -726,7 +746,7 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 $joinedTable = array(
                     'name' => $table,
                     'on' => "$table.$fk = clients.id",
-                    'columns'=> array(),
+                    'columns' => array(),
                     'type' => Select::JOIN_INNER
                 );
             }
@@ -773,14 +793,14 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             throw new \RuntimeException('Could not lock client for deletion');
         }
 
-        $connection = $this->serviceLocator->get('Db')->getDriver()->getConnection();
+        $connection = $this->_serviceLocator->get('Db')->getDriver()->getConnection();
         $id = $client['Id'];
 
         // Start transaction to keep database consistent in case of errors
         // If a transaction is already in progress, an exception will be thrown
         // which has to be caught. The commit() and rollBack() methods can only
         // be called if the transaction has been started here.
-        try{
+        try {
             $connection->beginTransaction();
             $transactionStarted = true;
         } catch (\Exception $exception) {
@@ -791,14 +811,14 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             // If requested, delete client's network interfaces from the list of
             // scanned interfaces. Also delete any manually entered description.
             if ($deleteInterfaces) {
-                $macAddresses = $this->serviceLocator->get('Database\Table\NetworkInterfaces')->getSql()->select();
+                $macAddresses = $this->_serviceLocator->get('Database\Table\NetworkInterfaces')->getSql()->select();
                 $macAddresses->columns(array('macaddr'));
                 $macAddresses->where(array('hardware_id' => $id));
-                $this->serviceLocator->get('Database\Table\NetworkDevicesIdentified')->delete(
-                    new \Zend\Db\Sql\Predicate\In('macaddr', $macAddresses)
+                $this->_serviceLocator->get('Database\Table\NetworkDevicesIdentified')->delete(
+                    new \Laminas\Db\Sql\Predicate\In('macaddr', $macAddresses)
                 );
-                $this->serviceLocator->get('Database\Table\NetworkDevicesScanned')->delete(
-                    new \Zend\Db\Sql\Predicate\In('mac', $macAddresses)
+                $this->_serviceLocator->get('Database\Table\NetworkDevicesScanned')->delete(
+                    new \Laminas\Db\Sql\Predicate\In('mac', $macAddresses)
                 );
             }
 
@@ -814,18 +834,22 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
                 'ClientConfig',
             );
             foreach ($tables as $table) {
-                $this->serviceLocator->get("Database\\Table\\$table")->delete(array('hardware_id' => $id));
+                $this->_serviceLocator->get("Database\\Table\\$table")->delete(array('hardware_id' => $id));
             }
-            $this->serviceLocator->get('Database\Table\Attachments')->delete(
+            $this->_serviceLocator->get('Database\Table\Attachments')->delete(
                 array(
                     'id_dde' => $id,
                     'table_name' => \Database\Table\Attachments::OBJECT_TYPE_CLIENT
                 )
             );
-            $this->serviceLocator->get('Model\Client\ItemManager')->deleteItems($id);
+            $this->_serviceLocator->get('Model\Client\ItemManager')->deleteItems($id);
 
             // Delete row in clients table
-            $this->serviceLocator->get('Database\Table\ClientsAndGroups')->delete(array('id' => $id));
+            $this->_serviceLocator->get('Database\Table\ClientsAndGroups')->delete(array('id' => $id));
+
+            if ($transactionStarted) {
+                $connection->commit();
+            }
         } catch (\Exception $exception) {
             if ($transactionStarted) {
                 $connection->rollback();
@@ -834,10 +858,48 @@ class ClientManager implements \Zend\ServiceManager\ServiceLocatorAwareInterface
             throw $exception;
         }
 
-        if ($transactionStarted) {
-            $connection->commit();
-        }
-
         $client->unlock();
+    }
+
+    /**
+     * Import client from a file (compressed or uncompressed XML)
+     *
+     * @param string $fileName File name
+     * @throws \RuntimeException if server responds with error
+     */
+    public function importFile($fileName)
+    {
+        return $this->importClient(\Library\FileObject::fileGetContents($fileName));
+    }
+
+    /**
+     * Import client
+     *
+     * @param string $data Inventory data (compressed or uncompressed XML)
+     * @throws \RuntimeException if server responds with error
+     */
+    public function importClient($data)
+    {
+        $uri = $this->_serviceLocator->get('Model\Config')->communicationServerUri;
+        $httpClient = $this->_serviceLocator->get('Library\HttpClient');
+        $httpClient->setOptions([
+            'strictredirects' => true, // required for POST requests
+            'useragent' => 'Braintacle_local_upload', // Substring 'local' required for correct server operation
+        ]);
+        $httpClient->setMethod('POST')
+                   ->setUri($uri)
+                   ->setHeaders(array('Content-Type' => 'application/x-compress'))
+                   ->setRawBody($data);
+        $response = $httpClient->send();
+        if (!$response->isSuccess()) {
+            throw new \RuntimeException(
+                sprintf(
+                    'Upload error. Server %s responded with error %d: %s',
+                    $uri,
+                    $response->getStatusCode(),
+                    $response->getReasonPhrase()
+                )
+            );
+        }
     }
 }

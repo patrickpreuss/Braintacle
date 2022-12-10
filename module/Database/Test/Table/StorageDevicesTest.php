@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the StorageDevices table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -25,7 +26,7 @@ class StorageDevicesTest extends AbstractTest
 {
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testHydrator()
@@ -34,7 +35,7 @@ class StorageDevicesTest extends AbstractTest
         $this->assertInstanceOf('Database\Hydrator\StorageDevices', $hydrator);
 
         $resultSet = static::$_table->getResultSetPrototype();
-        $this->assertInstanceOf('Zend\Db\ResultSet\HydratingResultSet', $resultSet);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\HydratingResultSet', $resultSet);
         $this->assertEquals($hydrator, $resultSet->getHydrator());
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Factory for NADA interface
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -28,15 +29,15 @@ namespace Database\Service;
  *
  * @codeCoverageIgnore
  */
-class NadaFactory implements \Zend\ServiceManager\FactoryInterface
+class NadaFactory implements \Laminas\ServiceManager\Factory\FactoryInterface
 {
-    /**
-     * @internal
-     */
-    public function createService(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
-    {
-        require_once('Nada.php');
-        $database = \Nada::factory($serviceLocator->get('Db'));
+    /** {@inheritdoc} */
+    public function __invoke(
+        \Interop\Container\ContainerInterface $container,
+        $requestedName,
+        array $options = null
+    ) {
+        $database = \Nada\Factory::getDatabase($container->get('Db'));
         if ($database->isSqlite()) {
             $database->emulatedDatatypes = array('bool', 'date', 'decimal', 'timestamp');
         } elseif ($database->isMySql()) {

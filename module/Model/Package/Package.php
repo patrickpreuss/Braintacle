@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Package
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -36,16 +37,16 @@ namespace Model\Package;
  * @property integer $Size Download size
  * @property string $Platform One of 'windows', 'linux' or 'mac'
  * @property string $Comment Comment
- * @property integer $NumNonnotified Number of clients waiting for notification,
+ * @property integer $NumPending Number of clients with pending packages,
+ * provided by PackageManager::getPackages()
+ * @property integer $NumRunning Number of clients currently downloading/installing package,
  * provided by PackageManager::getPackages()
  * @property integer $NumSuccess Number of clients with successful deployment,
  * provided by PackageManager::getPackages()
- * @property integer $NumNotified Number of clients currently downloading/installing package,
- * provided by PackageManager::getPackages()
  * @property integer $NumError Number of clients with unsuccessful deployment,
  * provided by PackageManager::getPackages()
- * @property string $Hash SHA1 hash of assembled package,
- * provided by PackageManager::getPackage()
+ * @property string $HashType Hash type (recommended: SHA256 for Windows packages, SHA1 for others)
+ * @property string $Hash Hash of assembled package,
  * @property string $DeployAction One of 'store', 'execute', 'launch',
  * provided by PackageManager::getPackage()
  * @property string $ActionParam Path for storage or command to execute, depending on action,
@@ -63,10 +64,9 @@ namespace Model\Package;
  * @property string $PostInstMessage Message to display after deployment,
  * provided by PackageManager::getPackage()
  */
-class Package extends \ArrayObject
+class Package extends \Model\AbstractModel
 {
-    /** {@inheritdoc} */
-    public function exchangeArray($input)
+    public function exchangeArray($input): array
     {
         if (isset($input['Id'])) {
             // Add Timestamp property

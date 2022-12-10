@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for \Library\Form\Element\Submit
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,11 +25,11 @@ namespace Library\Test\Form\Element;
 /**
  * Tests for \Library\Form\Element\Submit
  */
-class SubmitTest extends \PHPUnit_Framework_TestCase
+class SubmitTest extends \PHPUnit\Framework\TestCase
 {
     public function testSetValue()
     {
-        $submit = new \Library\Form\Element\Submit;
+        $submit = new \Library\Form\Element\Submit();
         $submit->setLabel('test');
         $submit->setValue('ignored');
         $this->assertEquals('test', $submit->getValue());
@@ -36,7 +37,7 @@ class SubmitTest extends \PHPUnit_Framework_TestCase
 
     public function testSetLabel()
     {
-        $submit = new \Library\Form\Element\Submit;
+        $submit = new \Library\Form\Element\Submit();
         $this->assertEquals('test', $submit->setLabel('test')->getValue());
     }
 }

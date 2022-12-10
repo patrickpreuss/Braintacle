@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Render a Select element with untranslated value options
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -31,10 +32,9 @@ namespace Library\View\Helper;
  * To render an element via the FormElement helper, set the element's "type"
  * attribute to "select_untranslated" to make it use this helper.
  */
-class FormSelectUntranslated extends \Zend\Form\View\Helper\FormSelect
+class FormSelectUntranslated extends \Laminas\Form\View\Helper\FormSelect
 {
-    /** {@inheritdoc} */
-    public function renderOptions(array $options, array $selectedOptions = array())
+    public function renderOptions(array $options, array $selectedOptions = []): string
     {
         $translatorEnabled = $this->isTranslatorEnabled();
         $this->setTranslatorEnabled(false);

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for FileReadable validator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -22,9 +23,9 @@
 namespace Library\Test\Validator;
 
 use Library\Validator\FileReadable;
-use \org\bovigo\vfs\vfsStream;
+use org\bovigo\vfs\vfsStream;
 
-class FileReadableTest extends \PHPUnit_Framework_TestCase
+class FileReadableTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * vfsStream root container
@@ -32,7 +33,7 @@ class FileReadableTest extends \PHPUnit_Framework_TestCase
      */
     protected $_root;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->_root = vfsStream::setup('root');
     }
@@ -40,17 +41,17 @@ class FileReadableTest extends \PHPUnit_Framework_TestCase
     public function testFileReadable()
     {
         $url = vfsStream::newFile('test', 0444)->at($this->_root)->url();
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertTrue($validator->isValid($url));
     }
 
     public function testFileNotReadable()
     {
         $url = vfsStream::newFile('test', 0000)->at($this->_root)->url();
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertFalse($validator->isValid($url));
         $this->assertEquals(
-            array(FileReadable::READABLE => "Datei '$url' ist nicht lesbar"),
+            array(FileReadable::READABLE => "File '$url' is not readable"),
             $validator->getMessages()
         );
     }
@@ -58,43 +59,42 @@ class FileReadableTest extends \PHPUnit_Framework_TestCase
     public function testDirectoryReadable()
     {
         $url = vfsStream::newDirectory('test', 0444)->at($this->_root)->url();
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(FileReadable::FILE => "'$url' ist keine Datei oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(FileReadable::FILE, key($validator->getMessages()));
     }
 
     public function testDirectoryNonReadable()
     {
         $url = vfsStream::newDirectory('test', 0000)->at($this->_root)->url();
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(FileReadable::FILE => "'$url' ist keine Datei oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(FileReadable::FILE, key($validator->getMessages()));
     }
 
     public function testNonExistent()
     {
         $url = $this->_root->url() . '/test';
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(FileReadable::FILE => "'$url' ist keine Datei oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(FileReadable::FILE, key($validator->getMessages()));
     }
 
     public function testEmpty()
     {
         $url = '';
-        $validator = new FileReadable;
+        $validator = new FileReadable();
         $this->assertFalse($validator->isValid($url));
+        $this->assertEquals(FileReadable::FILE, key($validator->getMessages()));
+    }
+
+    public function testFileMessage()
+    {
+        $url = $this->_root->url() . '/test';
+        $validator = new FileReadable();
+        $validator->isValid($url);
         $this->assertEquals(
-            array(FileReadable::FILE => "'$url' ist keine Datei oder nicht zugänglich"),
+            array(FileReadable::FILE => "'$url' is not a file or inaccessible"),
             $validator->getMessages()
         );
     }

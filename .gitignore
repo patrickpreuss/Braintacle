@@ -3,10 +3,19 @@ config/*
 # ... except for the project-defined templates
 !config/*.template
 
-# The doc/api/ directory contains the generated API documentation.
-doc/api/
-
 # The doc/CodeCoverage/ directory contains many phpunit-generated files. Ignore content...
 doc/CodeCoverage/*
 # ... except for the project-defined files.
 !doc/CodeCoverage/index.html
+
+# generated and managed by composer
+vendor/
+
+# generated and managed by PHPUnit
+.phpunit.result.cache
+
+# managed by PHIVE
+tools/
+
+# managed by phpdoc
+build/

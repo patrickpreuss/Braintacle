@@ -1,8 +1,9 @@
 <?php
+
 /**
  * ExtensionSlot item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,7 +25,7 @@ namespace Model\Client\Plugin;
 /**
  * ExtensionSlot item plugin
  */
-class ExtensionSlot extends AddIsWindows
+class ExtensionSlot extends AddOsColumns
 {
     /** {@inheritdoc} */
     public function columns()
@@ -41,8 +42,7 @@ class ExtensionSlot extends AddIsWindows
         );
     }
 
-    /** {@inheritdoc} */
-    public function order($order, $direction)
+    public function order(?string $order, string $direction): void
     {
         if ($order == 'id') {
             $order = 'slots.id';

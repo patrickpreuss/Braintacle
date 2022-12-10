@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Subnet manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,10 @@
 
 namespace Model\Network;
 
+use Database\Table\Subnets;
+use InvalidArgumentException;
+use Library\Validator\IpNetworkAddress;
+
 /**
  * Subnet manager
  */
@@ -32,14 +37,17 @@ class SubnetManager
      */
     protected $_subnets;
 
+    protected $ipNetworkAddressValidator;
+
     /**
      * Constructor
      *
      * @param \Database\Table\Subnets $subnets
      */
-    public function __construct(\Database\Table\Subnets $subnets)
+    public function __construct(Subnets $subnets, IpNetworkAddress $ipNetworkAddressValidator)
     {
         $this->_subnets = $subnets;
+        $this->ipNetworkAddressValidator = $ipNetworkAddressValidator;
     }
 
     /**
@@ -47,16 +55,16 @@ class SubnetManager
      *
      * @param string $order Property to sort by, default: null
      * @param string $direction One of [asc|desc].
-     * @return \Zend\Db\ResultSet\AbstractResultSet Result set producing \Model\Network\Subnet
+     * @return \Laminas\Db\ResultSet\AbstractResultSet Result set producing \Model\Network\Subnet
      */
 
-    public function getSubnets($order=null, $direction='asc')
+    public function getSubnets($order = null, $direction = 'asc')
     {
         $orderBy = '';
         if ($order) {
             $direction = ($direction == 'desc' ? 'DESC' : 'ASC');
             if ($order == 'CidrAddress') {
-                $orderBy = "ORDER BY ipsubnet $direction, ipmask $direction";
+                $orderBy = "ORDER BY netid $direction, mask $direction";
             } else {
                 $order = $this->_subnets->getHydrator()->extractName($order);
                 if ($order) {
@@ -64,11 +72,16 @@ class SubnetManager
                 }
             }
         }
+        // The first query covers only subnets with at least 1 inventoried
+        // interface, but includes subnets without scanned interfaces.
+        // The second query covers only subnets with at least 1 scanned
+        // interface, but includes subnets without inventoried interfaces.
+        // The UNION eliminates possible overlap.
         $query = <<<EOT
             SELECT
                 networks.ipsubnet AS netid,
                 networks.ipmask AS mask,
-                COUNT(networks.ipmask) AS num_inventoried,
+                COUNT(DISTINCT networks.hardware_id) AS num_inventoried,
                 (SELECT COUNT(mac) FROM netmap WHERE
                     netid = networks.ipsubnet AND
                     mask = networks.ipmask AND
@@ -81,20 +94,47 @@ class SubnetManager
                     mac NOT IN(SELECT macaddr FROM networks) AND
                     mac NOT IN(SELECT macaddr FROM network_devices)
                 ) AS num_unknown,
-                subnet.name
+                name
             FROM networks
             LEFT JOIN subnet ON networks.ipsubnet=subnet.netid AND networks.ipmask=subnet.mask
             WHERE
                 ipsubnet != '0.0.0.0' AND
                 NOT(ipsubnet = '127.0.0.0' AND ipmask='255.0.0.0') AND
+                ipsubnet != '169.254.0.0' AND
+                ipsubnet NOT LIKE 'fe80%' AND
                 description NOT LIKE '%PPP%'
             GROUP BY ipsubnet, ipmask, name
+            UNION
+            SELECT
+                netmap.netid,
+                netmap.mask,
+                (SELECT COUNT(DISTINCT hardware_id) FROM networks WHERE
+                    networks.ipsubnet = netmap.netid AND
+                    networks.ipmask = netmap.mask AND
+                    networks.description NOT LIKE '%PPP%'
+                ) AS num_inventoried,
+                (SELECT COUNT(mac) FROM netmap netmap3 WHERE
+                    netmap3.netid = netmap.netid AND
+                    netmap3.mask = netmap.mask AND
+                    netmap3.mac NOT IN(SELECT macaddr FROM networks) AND
+                    netmap3.mac IN(SELECT macaddr FROM network_devices)
+                ) AS num_identified,
+                (SELECT COUNT(mac) FROM netmap netmap3 WHERE
+                    netmap3.netid = netmap.netid AND
+                    netmap3.mask = netmap.mask AND
+                    netmap3.mac NOT IN(SELECT macaddr FROM networks) AND
+                    netmap3.mac NOT IN(SELECT macaddr FROM network_devices)
+                ) AS num_unknown,
+                subnet.name
+            FROM netmap
+            LEFT JOIN subnet ON netmap.netid=subnet.netid AND netmap.mask=subnet.mask
+            GROUP BY netmap.netid, netmap.mask, subnet.name
             $orderBy
 EOT;
 
         return $this->_subnets->getAdapter()->query(
             $query,
-            \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE,
+            \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE,
             $this->_subnets->getResultSetPrototype()
         );
     }
@@ -112,18 +152,15 @@ EOT;
      **/
     public function getSubnet($address, $mask)
     {
-        try {
-            $this->_validate($address, $mask);
-        } catch (\UnexpectedValueException $e) {
-            throw new \InvalidArgumentException($e->getMessage(), $e->getCode(), $e);
-        }
+        $this->validate($address, $mask);
+
         $select = $this->_subnets->getSql()->select();
         $select->columns(array('netid', 'mask', 'name'))
                ->where(array('netid' => $address, 'mask' => $mask));
         $subnet = $this->_subnets->selectWith($select)->current();
         if (!$subnet) {
             // Construct new Subnet object
-            $subnet = new \Model\Network\Subnet;
+            $subnet = new \Model\Network\Subnet();
             $subnet['Address'] = $address;
             $subnet['Mask'] = $mask;
             $subnet['Name'] = null;
@@ -134,18 +171,12 @@ EOT;
     /**
      * Store subnet properties
      *
-     * @param string $address
-     * @param string $mask
-     * @param string $name
      * @throws \InvalidArgumentException if address or mask is invalid
      */
-    public function saveSubnet($address, $mask, $name)
+    public function saveSubnet(string $address, string $mask, ?string $name)
     {
-        try {
-            $this->_validate($address, $mask);
-        } catch (\UnexpectedValueException $e) {
-            throw new \InvalidArgumentException($e->getMessage(), $e->getCode(), $e);
-        }
+        $this->validate($address, $mask);
+
         // Convert empty string to NULL for correct sorting order
         if ($name == '') {
             $name = null;
@@ -174,24 +205,13 @@ EOT;
      *
      * @param string $address
      * @param string $mask
-     * @throws \UnexpectedValueException if $address or $mask are invalid
+     * @throws InvalidArgumentException if $address or $mask are invalid
      */
-    protected function _validate($address, $mask)
+    protected function validate($address, $mask)
     {
-        $validator = new \Zend\Validator\Ip(array('allowipv6' => false));
-        if (!$validator->isValid($address)) {
-            $messages = $validator->getMessages();
-            throw new \UnexpectedValueException(
-                sprintf('Not an IPv4 address: "%s" (%s)', $address, array_shift($messages))
-            );
-        }
-        // Check $mask for valid syntax and consecutive leading 1 bits.
-        // The explicit 0 check is required on 32 bit systems.
-        $bits = ip2long($mask);
-        if ($bits === false or !($bits === 0 or ctype_digit((string) log(($bits ^ 0xffffffff) + 1, 2)))) {
-            throw new \UnexpectedValueException(
-                sprintf('Not an IPv4 mask: "%s"', $address)
-            );
+        if (!$this->ipNetworkAddressValidator->isValid("$address/$mask")) {
+            $messages = $this->ipNetworkAddressValidator->getMessages();
+            throw new InvalidArgumentException(array_shift($messages));
         }
     }
 }

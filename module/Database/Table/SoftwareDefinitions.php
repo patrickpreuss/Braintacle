@@ -1,4 +1,5 @@
 <?php
+
 /**
  * "software_definitions" table
  *
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "software_definitions" table
@@ -42,7 +43,7 @@ class SoftwareDefinitions extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'software_definitions';
         parent::__construct($serviceLocator);
@@ -52,7 +53,7 @@ class SoftwareDefinitions extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _preSetSchema($logger, $schema, $database)
+    protected function preSetSchema($logger, $schema, $database, $prune)
     {
         $tables = $database->getTableNames();
         $tableExists = in_array('software_definitions', $tables);
@@ -64,13 +65,13 @@ class SoftwareDefinitions extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _postSetSchema($logger, $schema, $database)
+    protected function postSetSchema($logger, $schema, $database, $prune)
     {
         if ($this->_migrateAccepted) {
             $logger->info('Migrating accepted software definitions');
             $this->adapter->query(
                 'INSERT INTO software_definitions (name, display) SELECT extracted, TRUE FROM dico_soft',
-                \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
+                \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
             );
             $logger->info('done.');
         }
@@ -80,8 +81,24 @@ class SoftwareDefinitions extends \Database\AbstractTable
                 INSERT INTO software_definitions (name, display)
                 SELECT extracted, FALSE FROM dico_ignored WHERE extracted NOT IN(SELECT name FROM software_definitions)
 EOT;
-            $this->adapter->query($query, \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE);
+            $this->adapter->query($query, \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE);
             $logger->info('done.');
+        }
+
+        $tables = $database->getTableNames();
+        if (in_array('softwares', $tables)) {
+            // Create rows for names which are not already defined.
+            // softwares.name may contain NULL which is not allowed here and
+            // will be mapped to an empty string instead.
+            $logger->info('Migrating uncategorized software definitions');
+            $query = <<<'EOT'
+                INSERT INTO software_definitions (name)
+                SELECT DISTINCT COALESCE(name, '')
+                FROM softwares
+                WHERE COALESCE(name, '') NOT IN(SELECT name FROM software_definitions)
+EOT;
+            $result = $this->adapter->query($query, \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE);
+            $logger->info(sprintf('done, %d definitions migrated.', $result->getAffectedRows()));
         }
     }
 }

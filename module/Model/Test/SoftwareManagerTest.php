@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\SoftwareManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,9 +25,14 @@ namespace Model\Test;
 class SoftwareManagerTest extends AbstractTest
 {
     /** {@inheritdoc} */
-    protected static $_tables = array(
-        'ClientsAndGroups', 'Software', 'SoftwareDefinitions', 'WindowsProductKeys', 'WindowsInstallations'
-    );
+    protected static $_tables = [
+        'ClientsAndGroups',
+        'Software',
+        'SoftwareDefinitions',
+        'SoftwareRaw',
+        'WindowsProductKeys',
+        'WindowsInstallations',
+    ];
 
     public function getSoftwareProvider()
     {
@@ -38,7 +44,7 @@ class SoftwareManagerTest extends AbstractTest
         $new2 = array('name' => 'new2', 'num_clients' => '2');
         $new2Os = array('name' => 'new2', 'num_clients' => '1');
         return array(
-            array(null, 'name', null, array($accepted, $ignored, $new1, $new2)),
+            array(null, 'name', 'asc', array($accepted, $ignored, $new1, $new2)),
             array(array(), 'num_clients', 'desc', array($accepted, $ignored, $new2, $new1)),
             array(array('Os' => 'windows'), 'name', 'asc', array($acceptedOs, $ignoredOs, $new1, $new2Os)),
             array(array('Os' => 'other'), 'name', 'asc', array($acceptedOs, $ignoredOs, $new2Os)),
@@ -54,9 +60,9 @@ class SoftwareManagerTest extends AbstractTest
      */
     public function testGetSoftware($filters, $order, $direction, $expected)
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $software = $model->getSoftware($filters, $order, $direction);
-        $this->assertInstanceOf('Traversable', $software);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\ResultSet', $software);
         $this->assertEquals($expected, iterator_to_array($software));
     }
 
@@ -75,20 +81,23 @@ class SoftwareManagerTest extends AbstractTest
      */
     public function testGetSoftwareInvalidArgument($filters, $order, $message)
     {
-        $this->setExpectedException('InvalidArgumentException', $message);
-        $model = $this->_getModel();
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage($message);
+        $model = $this->getModel();
         $software = $model->getSoftware($filters, $order);
     }
 
     public function testSetDisplay()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->setDisplay('new1', true); // updated
         $model->setDisplay('new2', true);
         $model->setDisplay('new3', false);
         $model->setDisplay('new4', false);
+
+        $dataSet = $this->getBooleanDataSetWrapper($this->loadDataSet('SetDisplay'), 0, 1);
         $this->assertTablesEqual(
-            $this->_loadDataset('SetDisplay')->getTable('software_definitions'),
+            $dataSet->getTable('software_definitions'),
             $this->getConnection()->createQueryTable(
                 'software_definitions',
                 'SELECT name, display FROM software_definitions ORDER BY name'
@@ -98,7 +107,7 @@ class SoftwareManagerTest extends AbstractTest
 
     public function testGetNumManualProductKeys()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $this->assertEquals(2, $model->getNumManualProductKeys());
     }
 
@@ -118,7 +127,7 @@ class SoftwareManagerTest extends AbstractTest
      */
     public function testSetProductKey($clientId, $productKey, $dataSet)
     {
-        $client = $this->getMock('Model\Client\Client');
+        $client = $this->createMock('Model\Client\Client');
         $client->method('offsetGet')->will(
             $this->returnValueMap(
                 array(
@@ -127,32 +136,34 @@ class SoftwareManagerTest extends AbstractTest
                 )
             )
         );
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->setProductKey($client, $productKey);
         $this->assertTablesEqual(
-            $this->_loadDataSet($dataSet)->getTable('braintacle_windows'),
+            $this->loadDataSet($dataSet)->getTable('braintacle_windows'),
             $this->getConnection()->createQueryTable(
-                'braintacle_windows', 'SELECT hardware_id, manual_product_key FROM braintacle_windows'
+                'braintacle_windows',
+                'SELECT hardware_id, manual_product_key FROM braintacle_windows ORDER BY hardware_id'
             )
         );
     }
 
     public function testSetProductKeyInvalid()
     {
-        $client = $this->getMock('Model\Client\Client');
+        $client = $this->createMock('Model\Client\Client');
         $client->method('offsetGet')->willReturn(array('ProductKey' => 'ABCDE-FGHIJ-KLMNO-PQRST-UVWXY'));
 
-        $model = $this->_getModel();
+        $model = $this->getModel();
         try {
             $model->setProductKey($client, 'invalid');
             $this->fail('Expected exception was not thrown');
         } catch (\InvalidArgumentException $e) {
-            $this->assertEquals("'invalid' ist kein gültiger Lizenzschlüssel", $e->getMessage());
+            $this->assertEquals("'invalid' is not a valid product key", $e->getMessage());
         }
         $this->assertTablesEqual(
-            $this->_loadDataSet()->getTable('braintacle_windows'),
+            $this->loadDataSet()->getTable('braintacle_windows'),
             $this->getConnection()->createQueryTable(
-                'braintacle_windows', 'SELECT hardware_id, manual_product_key FROM braintacle_windows'
+                'braintacle_windows',
+                'SELECT hardware_id, manual_product_key FROM braintacle_windows'
             )
         );
     }

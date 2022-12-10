@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Inventoried registry data
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,6 +28,6 @@ namespace Model\Client\Item;
  * @property string $Value Name of the registry value definition
  * @property string $data Registry Data
  */
-class RegistryData extends \ArrayObject
+class RegistryData extends \Model\AbstractModel
 {
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Registry manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -47,8 +48,7 @@ class RegistryManager
     public function __construct(
         \Database\Table\RegistryValueDefinitions $registryValueDefinitions,
         \Database\Table\RegistryData $registryData
-    )
-    {
+    ) {
         $this->_registryValueDefinitions = $registryValueDefinitions;
         $this->_registryData = $registryData;
     }
@@ -56,7 +56,7 @@ class RegistryManager
     /**
      * Get all registry value definitions
      *
-     * @return \Zend\Db\ResultSet\AbstractResultSet Result set producing \Model\Registry\Value, sorted by name
+     * @return \Laminas\Db\ResultSet\AbstractResultSet Result set producing \Model\Registry\Value, sorted by name
      */
     public function getValueDefinitions()
     {
@@ -67,20 +67,20 @@ class RegistryManager
     }
 
     /**
-     * Get registry value definition with given ID
+     * Get registry value definition with given name
      *
-     * @param integer $id ID of an existing value definition
+     * @param string $name Name of an existing value definition
      * @return \Model\Registry\Value
-     * @throws \RuntimeException if given ID id invalid
+     * @throws \RuntimeException if given name is invalid
      **/
-    public function getValueDefinition($id)
+    public function getValueDefinition($name)
     {
         $select = $this->_registryValueDefinitions->getSql()->select();
         $select->columns(array('id', 'name', 'regtree', 'regkey', 'regvalue'));
-        $select->where(array('id' => $id));
+        $select->where(array('name' => $name));
         $value = $this->_registryValueDefinitions->selectWith($select)->current();
         if (!$value) {
-            throw new RuntimeException('Invalid registry value ID: ' . $id);
+            throw new RuntimeException('Invalid registry value name: ' . $name);
         }
         return $value;
     }
@@ -96,7 +96,7 @@ class RegistryManager
      * @throws \DomainException if $rootkey is not one of the HKEY_* constants
      * @throws \Model\Registry\RuntimeException if a value with the same name already exists.
      **/
-    public function addValueDefinition($name, $rootKey, $subKeys, $value=null)
+    public function addValueDefinition($name, $rootKey, $subKeys, $value = null)
     {
         if (empty($subKeys)) {
             throw new \InvalidArgumentException('Subkeys must not be empty');
@@ -143,33 +143,38 @@ class RegistryManager
 
         $connection = $this->_registryValueDefinitions->getAdapter()->getDriver()->getConnection();
         $connection->beginTransaction();
-        $this->_registryData->update(
-            array('name' => $newName),
-            array('name' => $oldName)
-        );
-        $this->_registryValueDefinitions->update(
-            array('name' => $newName),
-            array('name' => $oldName)
-        );
-        $connection->commit();
+        try {
+            $this->_registryData->update(
+                array('name' => $newName),
+                array('name' => $oldName)
+            );
+            $this->_registryValueDefinitions->update(
+                array('name' => $newName),
+                array('name' => $oldName)
+            );
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
     }
 
     /**
      * Delete a value definition and its inventoried data
      *
-     * @param integer $id ID of value definition. Nonexistent ID is ignored.
+     * @param string $name Name of value definition. Nonexistent name is ignored.
      **/
-    public function deleteValueDefinition($id)
+    public function deleteValueDefinition($name)
     {
-        try {
-            $value = $this->getValueDefinition($id);
-        } catch (RuntimeException $e) {
-            return;
-        }
         $connection = $this->_registryValueDefinitions->getAdapter()->getDriver()->getConnection();
         $connection->beginTransaction();
-        $this->_registryData->delete(array('name' => $value['Name']));
-        $this->_registryValueDefinitions->delete(array('id' => $id));
-        $connection->commit();
+        try {
+            $this->_registryData->delete(['name' => $name]);
+            $this->_registryValueDefinitions->delete(['name' => $name]);
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
     }
 }

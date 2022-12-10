@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Default item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -34,7 +35,7 @@ class DefaultPlugin
 
     /**
      * Select object for query
-     * @var \Zend\Db\Sql\Select
+     * @var \Laminas\Db\Sql\Select
      */
     protected $_select;
 
@@ -74,7 +75,7 @@ class DefaultPlugin
     /**
      * Retrieve items from database
      *
-     * @return \Zend\Db\ResultSet\AbstractResultSet
+     * @return \Laminas\Db\ResultSet\AbstractResultSet
      */
     public function select()
     {
@@ -88,7 +89,7 @@ class DefaultPlugin
      */
     public function columns()
     {
-        $columns = array_values($this->_table->getHydrator()->getNamingStrategy()->getExtractorMap());
+        $columns = array_values($this->_table->getHydrator()->getNamingStrategy()->getExtractionMap());
         $this->_select->columns($columns);
     }
 
@@ -123,11 +124,8 @@ class DefaultPlugin
      * - NULL: type specific default
      * - "id": item ID
      * - other: query table's hydrator for matching column name
-     *
-     * @param string $order Property to sort by
-     * @param string $direction One of asc|desc
      */
-    public function order($order, $direction)
+    public function order(?string $order, string $direction): void
     {
         if (is_null($order)) {
             $tableClass = get_class($this->_table);

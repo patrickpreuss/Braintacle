@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Client\Client
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,9 +22,24 @@
 
 namespace Model\Test\Client;
 
+use Database\Table\ClientConfig;
+use Database\Table\GroupMemberships;
+use DateTime;
+use Laminas\Db\Adapter\Driver\ConnectionInterface;
+use Laminas\Db\ResultSet\AbstractResultSet;
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Model\Client\Client;
+use Model\Client\CustomFieldManager;
+use Model\Client\CustomFields;
+use Model\Group\GroupManager;
+use Model\Package\Assignment;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
+
 class ClientTest extends \Model\Test\AbstractTest
 {
-    protected static $_tables = array(
+    protected static $_tables = [
+        'AndroidInstallations',
         'ClientsAndGroups',
         'WindowsProductKeys',
         'WindowsInstallations',
@@ -33,29 +49,78 @@ class ClientTest extends \Model\Test\AbstractTest
         'Packages',
         'PackageHistory',
         'GroupMemberships',
-    );
+    ];
 
     public function testObjectProperties()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $this->assertInstanceOf('ArrayAccess', $model);
         $this->assertTrue(method_exists($model, 'exchangeArray'));
     }
 
     public function testOffsetGetExistingProperty()
     {
-        $model = new \Model\Client\Client(array('key' => 'value'));
-        $this->assertEquals('value', $model['key']);
+        $model = new Client(['Key' => 'value']);
+        $this->assertEquals('value', $model['Key']);
+    }
+
+    public function testOffsetGetAndroidNotNull()
+    {
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
+        $serviceManager->expects($this->once())->method('get')->willReturnCallback(
+            function ($name) {
+                // Proxy to real service manager. Mock only exists to assert
+                // that the service is used only once.
+                return static::$serviceManager->get($name);
+            }
+        );
+
+        $model = new \Model\Client\Client(array('Id' => 3));
+        $model->setServiceLocator($serviceManager);
+
+        $android = $model['Android'];
+        $this->assertInstanceOf('Model\Client\AndroidInstallation', $android);
+        $this->assertEquals(
+            [
+                'Country' => 'country',
+                'JavaVm' => 'java_vm',
+                'JavaInstallationDirectory' => 'java_installation_directory',
+                'JavaClassPath' => 'java_class_path',
+            ],
+            $android->getArrayCopy()
+        );
+        $this->assertSame($android, $model['Android']); // cached result
+    }
+
+    public function testOffsetGetAndroidNull()
+    {
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
+        $serviceManager->expects($this->once())->method('get')->willReturnCallback(
+            function ($name) {
+                // Proxy to real service manager. Mock only exists to assert
+                // that the service is used only once.
+                return static::$serviceManager->get($name);
+            }
+        );
+
+        $model = new \Model\Client\Client(array('Id' => 2));
+        $model->setServiceLocator($serviceManager);
+
+        $this->assertNull($model['Android']);
+        $this->assertNull($model['Android']); // cached result
     }
 
     public function testOffsetGetWindowsNotNull()
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->expects($this->once())->method('get')->willReturnCallback(
-            function($name) {
+            function ($name) {
                 // Proxy to real service manager. Mock only exists to assert
                 // that the service is used only once.
-                return \Library\Application::getService($name);
+                return static::$serviceManager->get($name);
             }
         );
 
@@ -73,6 +138,7 @@ class ClientTest extends \Model\Test\AbstractTest
                 'ProductKey' => 'product_key2',
                 'ProductId' => 'product_id2',
                 'ManualProductKey' => 'manual_product_key2',
+                'CpuArchitecture' => 'cpu_architecture2',
             ),
             $windows->getArrayCopy()
         );
@@ -81,12 +147,13 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testOffsetGetWindowsNull()
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->expects($this->once())->method('get')->willReturnCallback(
-            function($name) {
+            function ($name) {
                 // Proxy to real service manager. Mock only exists to assert
                 // that the service is used only once.
-                return \Library\Application::getService($name);
+                return static::$serviceManager->get($name);
             }
         );
 
@@ -99,15 +166,15 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testOffsetGetCustomFields()
     {
-        $customFieldManager = $this->getMockBuilder('Model\Client\CustomFieldManager')
-                                   ->disableOriginalConstructor()
-                                   ->getMock();
-        $customFieldManager->expects($this->once())->method('read')->with(2)->willReturn('custom_fields');
+        $customFields = $this->createStub(CustomFields::class);
 
-        $model = $this->_getModel(array('Model\Client\CustomFieldManager' => $customFieldManager));
-        $model['Id'] = 2;
-        $this->assertEquals('custom_fields', $model['CustomFields']);
-        $this->assertEquals('custom_fields', $model['CustomFields']); // cached result
+        $customFieldManager = $this->createMock('Model\Client\CustomFieldManager');
+        $customFieldManager->expects($this->once())->method('read')->with(2)->willReturn($customFields);
+
+        $model = $this->getModel(array('Model\Client\CustomFieldManager' => $customFieldManager));
+        $model->id = 2;
+        $this->assertEquals($customFields, $model->customFields);
+        $this->assertEquals($customFields, $model->customFields); // cached result
     }
 
     public function testOffsetGetRegistry()
@@ -131,12 +198,13 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testOffsetGetBlacklisted($index, $initialIndex, $initialValue, $result)
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->expects($this->once())->method('get')->willReturnCallback(
-            function($name) {
+            function ($name) {
                 // Proxy to real service manager. Mock only exists to assert
                 // that the service is used only once.
-                return \Library\Application::getService($name);
+                return static::$serviceManager->get($name);
             }
         );
         $model = new \Model\Client\Client(array($initialIndex => $initialValue));
@@ -147,8 +215,9 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testOffsetGetItems()
     {
-        $model = $this->getMockBuilder('Model\Client\Client')->setMethods(array('getItems'))->getMock();
-        $model->expects($this->once())->method('getItems')->with('type')->willReturn('items');
+        /** @var MockObject|Client */
+        $model = $this->createPartialMock(Client::class, ['getItems']);
+        $model->expects($this->once())->method('getItems')->with('Type')->willReturn('items');
         $this->assertEquals('items', $model['type']);
         $this->assertEquals('items', $model['type']); // cached result
     }
@@ -197,22 +266,21 @@ class ClientTest extends \Model\Test\AbstractTest
     {
         $globalOption = (($option == 'allowScan') ? 'scannersPerSubnet' : $option);
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('__get')->with($globalOption)->willReturn($globalValue);
 
         $groups = array();
         foreach ($groupValues as $groupValue) {
-            $group = $this->getMock('Model\Group\Group');
+            $group = $this->createMock('Model\Group\Group');
             $group->method('getConfig')->with($option)->willReturn($groupValue);
             $groups[] = $group;
         }
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->method('get')->with('Model\Config')->willReturn($config);
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('offsetGet', 'getGroups', '__destruct'))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroups', '__destruct']);
         $model->method('offsetGet')->willReturn(42);
         $model->method('getGroups')->willReturn($groups);
         $model->setServiceLocator($serviceManager);
@@ -222,18 +290,17 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testGetDefaultConfigCache()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->expects($this->exactly(2))
                ->method('__get')
                ->withConsecutive(array('option1'), array('option2'))
                ->willReturnOnConsecutiveCalls('value1', 'value2');
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->expects($this->exactly(2))->method('get')->with('Model\Config')->willReturn($config);
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('offsetGet', 'getGroups', '__destruct'))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroups', '__destruct']);
         $model->expects($this->exactly(3))->method('offsetGet')->willReturn(42);
         $model->expects($this->exactly(2))->method('getGroups')->willReturn(array());
         $model->setServiceLocator($serviceManager);
@@ -243,48 +310,119 @@ class ClientTest extends \Model\Test\AbstractTest
         $this->assertEquals('value2', $model->getDefaultConfig('option2')); // non-cached value to test group cache
     }
 
-    public function testGetAllConfig()
+    public function testGetAllConfigWithNonNullValues()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'getConfig'))
-                      ->getMock();
-        $model->method('getConfig')->willReturnMap(
-            array(
-                array('contactInterval', 2),
-                array('inventoryInterval', 3),
-                array('packageDeployment', 0),
-                array('downloadPeriodDelay', 4),
-                array('downloadCycleDelay', 5),
-                array('downloadFragmentDelay', 6),
-                array('downloadMaxPriority', 7),
-                array('downloadTimeout', 8),
-                array('allowScan', 1),
-                array('scanSnmp', 0),
-                array('scanThisNetwork', '192.0.2.0'),
-            )
-        );
+        $model = $this->createPartialMock(Client::class, ['getConfig']);
+        $model->method('getConfig')->willReturnMap([
+            ['contactInterval', 1],
+            ['inventoryInterval', 2],
+            ['downloadPeriodDelay', 3],
+            ['downloadCycleDelay', 4],
+            ['downloadFragmentDelay', 5],
+            ['downloadMaxPriority', 6],
+            ['downloadTimeout', 7],
+            ['scanThisNetwork', 'network'],
+            // The following options can only be 0 or NULL
+            ['packageDeployment', 0],
+            ['allowScan', 0],
+            ['scanSnmp', 0],
+        ]);
+
         $this->assertSame(
-            array(
-                'Agent' => array(
-                    'contactInterval' => 2,
-                    'inventoryInterval' => 3,
-                ),
-                'Download' => array(
+            [
+                'Agent' => [
+                    'contactInterval' => 1,
+                    'inventoryInterval' => 2,
+                ],
+                'Download' => [
                     'packageDeployment' => 0,
-                    'downloadPeriodDelay' => 4,
-                    'downloadCycleDelay' => 5,
-                    'downloadFragmentDelay' => 6,
-                    'downloadMaxPriority' => 7,
-                    'downloadTimeout' => 8,
-                ),
-                'Scan' => array(
+                    'downloadPeriodDelay' => 3,
+                    'downloadCycleDelay' => 4,
+                    'downloadFragmentDelay' => 5,
+                    'downloadMaxPriority' => 6,
+                    'downloadTimeout' => 7,
+                ],
+                'Scan' => [
                     'allowScan' => 0,
                     'scanSnmp' => 0,
-                    'scanThisNetwork' => '192.0.2.0',
-                ),
-            ),
+                    'scanThisNetwork' => 'network',
+                ],
+            ],
             $model->getAllConfig()
         );
+    }
+
+    public function testGetAllConfigWithNullValues()
+    {
+        $model = $this->createPartialMock(Client::class, ['getConfig']);
+        $model->method('getConfig')->willReturn(null);
+
+        $this->assertSame(
+            [
+                'Agent' => [
+                    'contactInterval' => null,
+                    'inventoryInterval' => null,
+                ],
+                'Download' => [
+                    'packageDeployment' => 1,
+                    'downloadPeriodDelay' => null,
+                    'downloadCycleDelay' => null,
+                    'downloadFragmentDelay' => null,
+                    'downloadMaxPriority' => null,
+                    'downloadTimeout' => null,
+                ],
+                'Scan' => [
+                    'allowScan' => 1,
+                    'scanSnmp' => 1,
+                    'scanThisNetwork' => null,
+                ],
+            ],
+            $model->getAllConfig()
+        );
+    }
+
+    public function testGetExplicitConfigWithNonNullValues()
+    {
+        $model = $this->createPartialMock(Client::class, ['getConfig']);
+        $model->method('getConfig')->willReturnMap([
+            ['contactInterval', 0],
+            ['inventoryInterval', 1],
+            ['downloadPeriodDelay', 2],
+            ['downloadCycleDelay', 3],
+            ['downloadFragmentDelay', 4],
+            ['downloadMaxPriority', 5],
+            ['downloadTimeout', 6],
+            ['scanThisNetwork', 'network'],
+            // The following options can only be 0 or NULL
+            ['packageDeployment', 0],
+            ['allowScan', 0],
+            ['scanSnmp', 0],
+        ]);
+
+        $this->assertSame(
+            [
+                'contactInterval' => 0,
+                'inventoryInterval' => 1,
+                'packageDeployment' => 0,
+                'downloadPeriodDelay' => 2,
+                'downloadCycleDelay' => 3,
+                'downloadFragmentDelay' => 4,
+                'downloadMaxPriority' => 5,
+                'downloadTimeout' => 6,
+                'allowScan' => 0,
+                'scanSnmp' => 0,
+                'scanThisNetwork' => 'network',
+            ],
+            $model->getExplicitConfig()
+        );
+    }
+
+    public function testGetExplicitConfigWithNullValues()
+    {
+        $model = $this->createPartialMock(Client::class, ['getConfig']);
+        $model->method('getConfig')->willReturn(null);
+
+        $this->assertSame([], $model->getExplicitConfig());
     }
 
     public function getEffectiveConfigProvider()
@@ -328,9 +466,7 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testGetEffectiveConfig($option, $defaultValue, $clientValue, $expectedValue)
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('offsetGet', 'getDefaultConfig', 'getConfig'))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getDefaultConfig', 'getConfig']);
         $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getDefaultConfig')->with($option)->willReturn($defaultValue);
         $model->method('getConfig')->with($option)->willReturn($clientValue);
@@ -357,25 +493,26 @@ class ClientTest extends \Model\Test\AbstractTest
      * @dataProvider getEffectiveConfigForInventoryIntervalProvider
      */
     public function testGetEffectiveConfigForInventoryInterval(
-        $globalValue, $groupValues, $clientValue, $expectedValue
-    )
-    {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $globalValue,
+        $groupValues,
+        $clientValue,
+        $expectedValue
+    ) {
+        $config = $this->createMock('Model\Config');
         $config->method('__get')->with('inventoryInterval')->willReturn($globalValue);
 
         $groups = array();
         foreach ($groupValues as $groupValue) {
-            $group = $this->getMock('Model\Group\Group');
+            $group = $this->createMock('Model\Group\Group');
             $group->method('getConfig')->with('inventoryInterval')->willReturn($groupValue);
             $groups[] = $group;
         }
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->method('get')->with('Model\Config')->willReturn($config);
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('offsetGet', 'getConfig', 'getGroups'))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getConfig', 'getGroups']);
         $model->setServiceLocator($serviceManager);
         $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getConfig')->with('inventoryInterval')->willReturn($clientValue);
@@ -386,9 +523,7 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testGetEffectiveConfigCache()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('offsetGet', 'getConfig'))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getConfig']);
         $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->expects($this->exactly(2))
               ->method('getConfig')
@@ -402,22 +537,22 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function getPackageAssignmentsProvider()
     {
-        $package1 = array(
-            'PackageName' => 'package1',
-            'Status' => 'SUCCESS',
-            'Timestamp' => new \DateTime('2014-12-30 19:02:23'),
-        );
-        $package2 = array(
-            'PackageName' => 'package2',
-            'Status' => 'NOTIFIED',
-            'Timestamp' => new \DateTime('2014-12-30 19:01:23'),
-        );
+        $package1 = [
+            'packageName' => 'package1',
+            'status' => Assignment::SUCCESS,
+            'timestamp' => new DateTime('2014-12-30 19:02:23'),
+        ];
+        $package2 = [
+            'packageName' => 'package2',
+            'status' => Assignment::RUNNING,
+            'timestamp' => new DateTime('2014-12-30 19:01:23'),
+        ];
         // Non-default order. Default order tested separately.
-        return array(
-            array('PackageName', 'desc', $package2, $package1),
-            array('Status', 'asc', $package2, $package1),
-            array('Status', 'desc', $package1, $package2),
-        );
+        return [
+            ['packageName', 'desc', $package2, $package1],
+            ['status', 'asc', $package2, $package1],
+            ['status', 'desc', $package1, $package2],
+        ];
     }
 
     /**
@@ -425,87 +560,233 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testGetPackageAssignments($order, $direction, $package0, $package1)
     {
-        $model = $this->_getModel();
-        $model['Id'] = 1;
+        $model = $this->getModel();
+        $model->id = 1;
 
         $assignments = $model->getPackageAssignments($order, $direction);
-        $this->assertInstanceOf('Zend\Db\ResultSet\AbstractResultSet', $assignments);
+        $this->assertInstanceOf(AbstractResultSet::class, $assignments);
+        /** @var Assignment[] */
         $assignments = iterator_to_array($assignments);
         $this->assertCount(2, $assignments);
-        $this->assertContainsOnlyInstancesOf('Model\Package\Assignment', $assignments);
-        $this->assertEquals($package0, $assignments[0]->getArrayCopy());
-        $this->assertEquals($package1, $assignments[1]->getArrayCopy());
+        $this->assertContainsOnlyInstancesOf(Assignment::class, $assignments);
+        $this->assertEquals($package0, get_object_vars($assignments[0]));
+        $this->assertEquals($package1, get_object_vars($assignments[1]));
     }
 
     public function testGetPackageAssignmentsDefaultOrder()
     {
-        $model = $this->_getModel();
-        $model['Id'] = 1;
+        $model = $this->getModel();
+        $model->id = 1;
 
         $assignments = $model->getPackageAssignments();
-        $this->assertInstanceOf('Zend\Db\ResultSet\AbstractResultSet', $assignments);
+        $this->assertInstanceOf(AbstractResultSet::class, $assignments);
+        /** @var Assignment[] */
         $assignments = iterator_to_array($assignments);
         $this->assertCount(2, $assignments);
-        $this->assertContainsOnlyInstancesOf('Model\Package\Assignment', $assignments);
+        $this->assertContainsOnlyInstancesOf(Assignment::class, $assignments);
         $this->assertEquals(
-            array(
-                'PackageName' => 'package1',
-                'Status' => 'SUCCESS',
-                'Timestamp' => new \DateTime('2014-12-30 19:02:23'),
-            ),
-            $assignments[0]->getArrayCopy()
+            [
+                'packageName' => 'package1',
+                'status' => Assignment::SUCCESS,
+                'timestamp' => new DateTime('2014-12-30 19:02:23'),
+            ],
+            get_object_vars($assignments[0])
         );
         $this->assertEquals(
-            array(
-                'PackageName' => 'package2',
-                'Status' => 'NOTIFIED',
-                'Timestamp' => new \DateTime('2014-12-30 19:01:23'),
-            ),
-            $assignments[1]->getArrayCopy()
+            [
+                'packageName' => 'package2',
+                'status' => Assignment::RUNNING,
+                'timestamp' => new DateTime('2014-12-30 19:01:23'),
+            ],
+            get_object_vars($assignments[1])
         );
     }
 
     public function testGetDownloadedPackageIds()
     {
-        $model = $this->_getModel();
-        $model['Id'] = 1;
+        $model = $this->getModel();
+        $model->id = 1;
         $this->assertEquals(array(1, 2), $model->getDownloadedPackageIds());
+    }
+
+    public function resetPackageProvider()
+    {
+        return array(
+            array(1, 'resetPackageNotResetYet'),
+            array(2, 'resetPackageAlreadyReset'),
+        );
+    }
+
+    /**
+     * @dataProvider resetPackageProvider
+     */
+    public function testResetPackage($packageId, $dataset)
+    {
+        $package = array('Id' => $packageId);
+
+        $packageManager = $this->createMock('Model\Package\PackageManager');
+        $packageManager->method('getPackage')->with('packageName')->willReturn($package);
+
+        $model = $this->getModel(
+            array(
+                'Library\Now' => new \DateTime('2017-05-27T19:39:25'),
+                'Model\Package\PackageManager' => $packageManager,
+            )
+        );
+        $model->Id = 1;
+
+        $model->resetPackage('packageName');
+
+        $this->assertTablesEqual(
+            $this->loadDataSet($dataset)->getTable('devices'),
+            $this->getConnection()->createQueryTable(
+                'devices',
+                'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ORDER BY hardware_id, name, ivalue'
+            )
+        );
+    }
+
+    public function testResetPackageNotAssigned()
+    {
+        $package = array('Id' => 3);
+
+        $packageManager = $this->createMock('Model\Package\PackageManager');
+        $packageManager->method('getPackage')->with('packageName')->willReturn($package);
+
+        $model = $this->getModel(array('Model\Package\PackageManager' => $packageManager));
+        $model->Id = 1;
+
+        try {
+            $model->resetPackage('packageName');
+            $this->fail('Expected exception was not thrown');
+        } catch (\RuntimeException $e) {
+            $this->assertEquals('Package "packageName" is not assigned to client 1', $e->getMessage());
+        }
+
+        $this->assertTablesEqual(
+            $this->loadDataSet()->getTable('devices'),
+            $this->getConnection()->createQueryTable(
+                'devices',
+                'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ORDER BY hardware_id, name, ivalue'
+            )
+        );
+    }
+
+    public function testResetPackageCommit()
+    {
+        $package = array('Id' => 1);
+
+        $packageManager = $this->createMock('Model\Package\PackageManager');
+        $packageManager->method('getPackage')->with('packageName')->willReturn($package);
+
+        $connection = $this->createMock(ConnectionInterface::class);
+        $connection->expects($this->once())->method('beginTransaction');
+        $connection->expects($this->once())->method('commit');
+
+        $driver = $this->createMock('Laminas\Db\Adapter\Driver\DriverInterface');
+        $driver->method('getConnection')->willReturn($connection);
+
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
+        $adapter->method('getDriver')->willReturn($driver);
+
+        $resultSet = $this->createMock('Laminas\Db\ResultSet\AbstractResultSet');
+        $resultSet->method('current')->willReturn(array('num' => 1));
+
+        $select = $this->createMock('Laminas\Db\Sql\Select');
+
+        $sql = $this->createMock('Laminas\Db\Sql\Sql');
+        $sql->method('select')->willReturn($select);
+
+        $clientConfig = $this->createMock(ClientConfig::class);
+        $clientConfig->method('getSql')->willReturn($sql);
+        $clientConfig->method('selectWith')->willReturn($resultSet);
+        $clientConfig->method('getAdapter')->willReturn($adapter);
+
+        $model = $this->getModel(
+            array(
+                'Database\Table\ClientConfig' => $clientConfig,
+                'Model\Package\PackageManager' => $packageManager,
+            )
+        );
+        $model->Id = 1;
+
+        $model->resetPackage('packageName');
+    }
+
+    public function testResetPackageRollbackOnException()
+    {
+        $package = array('Id' => 1);
+
+        $packageManager = $this->createMock('Model\Package\PackageManager');
+        $packageManager->method('getPackage')->with('packageName')->willReturn($package);
+
+        $connection = $this->createMock(ConnectionInterface::class);
+        $connection->expects($this->once())->method('beginTransaction');
+        $connection->expects($this->once())->method('rollback');
+        $connection->expects($this->never())->method('commit');
+
+        $driver = $this->createMock('Laminas\Db\Adapter\Driver\DriverInterface');
+        $driver->method('getConnection')->willReturn($connection);
+
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
+        $adapter->method('getDriver')->willReturn($driver);
+
+        $clientConfig = $this->createMock(ClientConfig::class);
+        $clientConfig->method('getAdapter')->willReturn($adapter);
+        $clientConfig->method('getSql')->willThrowException(new \RuntimeException('test message'));
+
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test message');
+
+        $model = $this->getModel([
+                'Database\Table\ClientConfig' => $clientConfig,
+                'Model\Package\PackageManager' => $packageManager,
+        ]);
+        $model->Id = 1;
+
+        $model->resetPackage('packageName');
     }
 
     public function testGetItemsDefaultArgs()
     {
-        $itemManager = $this->getMockBuilder('Model\Client\ItemManager')->disableOriginalConstructor()->getMock();
+        $result = $this->createStub(AbstractResultSet::class);
+
+        $itemManager = $this->createMock('Model\Client\ItemManager');
         $itemManager->expects($this->once())
                     ->method('getItems')
                     ->with('type', array('Client' => 42), null, null)
-                    ->willReturn('result');
+                    ->willReturn($result);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->method('get')->with('Model\Client\ItemManager')->willReturn($itemManager);
 
-        $model = $this->getMockBuilder('Model\Client\Client')->setMethods(array('offsetGet'))->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet']);
         $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->setServiceLocator($serviceManager);
 
-        $this->assertEquals('result', $model->getItems('type'));
+        $this->assertSame($result, $model->getItems('type'));
     }
 
     public function testGetItemsCustomArgs()
     {
-        $itemManager = $this->getMockBuilder('Model\Client\ItemManager')->disableOriginalConstructor()->getMock();
+        $result = $this->createStub(AbstractResultSet::class);
+
+        $itemManager = $this->createMock('Model\Client\ItemManager');
         $itemManager->expects($this->once())
                     ->method('getItems')
                     ->with('type', array('filter' => 'arg', 'Client' => 42), 'order', 'direction')
-                    ->willReturn('result');
+                    ->willReturn($result);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var MockObject|ServiceLocatorInterface */
+        $serviceManager = $this->createMock(ServiceLocatorInterface::class);
         $serviceManager->method('get')->with('Model\Client\ItemManager')->willReturn($itemManager);
 
-        $model = $this->getMockBuilder('Model\Client\Client')->setMethods(array('offsetGet'))->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet']);
         $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->setServiceLocator($serviceManager);
 
-        $this->assertEquals('result', $model->getItems('type', 'order', 'direction', array('filter' => 'arg')));
+        $this->assertSame($result, $model->getItems('type', 'order', 'direction', array('filter' => 'arg')));
     }
 
     public function setGroupMembershipsNoActionProvider()
@@ -547,14 +828,12 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testSetGroupMembershipsNoAction($oldMemberships, $newMemberships)
     {
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->expects($this->never())->method('insert');
         $groupMemberships->expects($this->never())->method('update');
         $groupMemberships->expects($this->never())->method('delete');
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(
             array(
                 array('Id' => 1, 'Name' => 'group1'),
@@ -562,19 +841,18 @@ class ClientTest extends \Model\Test\AbstractTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
                            array(
-                               array('Database\Table\GroupMemberships', true, $groupMemberships),
-                               array('Model\Group\GroupManager', true, $groupManager),
+                               array('Database\Table\GroupMemberships', $groupMemberships),
+                               array('Model\Group\GroupManager', $groupManager),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getGroupMemberships')->willReturn($oldMemberships);
         $model->setServiceLocator($serviceManager);
 
@@ -613,9 +891,7 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testSetGroupMembershipsInsert($oldMemberships, $newMembership)
     {
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->expects($this->once())->method('insert')->with(
             array(
                 'hardware_id' => 42,
@@ -626,7 +902,7 @@ class ClientTest extends \Model\Test\AbstractTest
         $groupMemberships->expects($this->never())->method('update');
         $groupMemberships->expects($this->never())->method('delete');
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(
             array(
                 array('Id' => 1, 'Name' => 'group1'),
@@ -634,19 +910,18 @@ class ClientTest extends \Model\Test\AbstractTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
                            array(
-                               array('Database\Table\GroupMemberships', true, $groupMemberships),
-                               array('Model\Group\GroupManager', true, $groupManager),
+                               array('Database\Table\GroupMemberships', $groupMemberships),
+                               array('Model\Group\GroupManager', $groupManager),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getGroupMemberships')->willReturn($oldMemberships);
         $model->setServiceLocator($serviceManager);
 
@@ -685,9 +960,7 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testSetGroupMembershipsUpdate($oldMembership, $newMembership)
     {
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->expects($this->never())->method('insert');
         $groupMemberships->expects($this->once())->method('update')->with(
             array('static' => $newMembership),
@@ -698,7 +971,7 @@ class ClientTest extends \Model\Test\AbstractTest
         );
         $groupMemberships->expects($this->never())->method('delete');
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(
             array(
                 array('Id' => 1, 'Name' => 'group1'),
@@ -706,19 +979,18 @@ class ClientTest extends \Model\Test\AbstractTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
                            array(
-                               array('Database\Table\GroupMemberships', true, $groupMemberships),
-                               array('Model\Group\GroupManager', true, $groupManager),
+                               array('Database\Table\GroupMemberships', $groupMemberships),
+                               array('Model\Group\GroupManager', $groupManager),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getGroupMemberships')->willReturn(array(1 => $oldMembership));
         $model->setServiceLocator($serviceManager);
 
@@ -743,21 +1015,19 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testSetGroupMembershipsDelete($oldMembership)
     {
-        $group1 = $this->getMock('Model\Group\Group');
+        $group1 = $this->createMock('Model\Group\Group');
         $group1->method('offsetGet')->willReturnMap(
             array(array('Id', 1), array('Name', 'group1'))
         );
         $group1->expects($this->once())->method('update')->with(true);
 
-        $group2 = $this->getMock('Model\Group\Group');
+        $group2 = $this->createMock('Model\Group\Group');
         $group2->method('offsetGet')->willReturnMap(
             array(array('Id', 2), array('Name', 'group2'))
         );
         $group2->expects($this->never())->method('update');
 
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->expects($this->never())->method('insert');
         $groupMemberships->expects($this->never())->method('update');
         $groupMemberships->expects($this->once())->method('delete')->with(
@@ -767,23 +1037,22 @@ class ClientTest extends \Model\Test\AbstractTest
             )
         );
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(array($group1, $group2));
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
                            array(
-                               array('Database\Table\GroupMemberships', true, $groupMemberships),
-                               array('Model\Group\GroupManager', true, $groupManager),
+                               array('Database\Table\GroupMemberships', $groupMemberships),
+                               array('Model\Group\GroupManager', $groupManager),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
-        $model->method('getGroupMemberships')->willReturn(array(1 => $oldMembership));
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
+        $model->method('getGroupMemberships')->willReturn([1 => $oldMembership]);
         $model->setServiceLocator($serviceManager);
 
         $cache = new \ReflectionProperty($model, '_groups');
@@ -796,9 +1065,7 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testSetGroupMembershipsMixedKeys()
     {
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->expects($this->exactly(2))->method('insert')->withConsecutive(
             array(
                 array(
@@ -818,7 +1085,7 @@ class ClientTest extends \Model\Test\AbstractTest
         $groupMemberships->expects($this->never())->method('update');
         $groupMemberships->expects($this->never())->method('delete');
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(
             array(
                 array('Id' => 1, 'Name' => 'group1'),
@@ -827,19 +1094,18 @@ class ClientTest extends \Model\Test\AbstractTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
                            array(
-                               array('Database\Table\GroupMemberships', true, $groupMemberships),
-                               array('Model\Group\GroupManager', true, $groupManager),
+                               array('Database\Table\GroupMemberships', $groupMemberships),
+                               array('Model\Group\GroupManager', $groupManager),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getGroupMemberships')->willReturn(array(2 => \Model\Client\Client::MEMBERSHIP_ALWAYS));
         $model->setServiceLocator($serviceManager);
 
@@ -854,25 +1120,25 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testSetGroupMembershipsInvalidMembership()
     {
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock('Model\Group\GroupManager');
         $groupManager->method('getGroups')->with()->willReturn(
             array(array('Id' => 1, 'Name' => 'group1'))
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
                        ->willReturnMap(
-                           array(array('Model\Group\GroupManager', true, $groupManager))
+                           array(array('Model\Group\GroupManager', $groupManager))
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('getGroupMemberships', '__destruct'))
-                      ->setConstructorArgs(array(array('Id' => 42)))
-                      ->getMock();
+        $model = $this->createPartialMock(Client::class, ['offsetGet', 'getGroupMemberships', '__destruct']);
+        $model->method('offsetGet')->with('Id')->willReturn(42);
         $model->method('getGroupMemberships')->willReturn(array());
         $model->setServiceLocator($serviceManager);
 
-        $this->setExpectedException('InvalidArgumentException', 'Invalid membership type: 23');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Invalid membership type: 23');
         $model->setGroupMemberships(array('group1' => 23));
     }
 
@@ -914,20 +1180,21 @@ class ClientTest extends \Model\Test\AbstractTest
      */
     public function testGetGroupMemberships($type, $expected)
     {
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock(GroupManager::class);
         $groupManager->expects($this->once())->method('updateCache');
 
-        $model = $this->_getModel(array('Model\Group\GroupManager' => $groupManager));
-        $model['Id'] = 1;
+        $model = $this->getModel(array('Model\Group\GroupManager' => $groupManager));
+        $model->Id = 1;
 
         $this->assertSame($expected, $model->getGroupMemberships($type));
     }
 
     public function testGetGroupMembershipsInvalidType()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Bad value for membership: 42');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Bad value for membership: 42');
 
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->getGroupMemberships(42);
     }
 
@@ -935,13 +1202,13 @@ class ClientTest extends \Model\Test\AbstractTest
     {
         $groups = array('group1', 'group2');
 
-        $groupManager = $this->getMockBuilder('Model\Group\GroupManager')->disableOriginalConstructor()->getMock();
+        $groupManager = $this->createMock(GroupManager::class);
         $groupManager->expects($this->once())->method('getGroups')->with('Member', 42)->willReturn(
             new \ArrayIterator($groups)
         );
 
-        $model = $this->_getModel(array('Model\Group\GroupManager' => $groupManager));
-        $model['Id'] = 42;
+        $model = $this->getModel(array('Model\Group\GroupManager' => $groupManager));
+        $model->Id = 42;
 
         $this->assertEquals($groups, $model->getGroups());
         $this->assertEquals($groups, $model->getGroups()); // cached result
@@ -949,38 +1216,34 @@ class ClientTest extends \Model\Test\AbstractTest
 
     public function testSetCustomFields()
     {
-        $customFieldManager = $this->getMockBuilder('Model\Client\CustomFieldManager')
-                                   ->disableOriginalConstructor()
-                                   ->getMock();
+        $customFieldManager = $this->createMock(CustomFieldManager::class);
         $customFieldManager->expects($this->once())->method('write')->with(42, 'data');
 
-        $model = $this->_getModel(array('Model\Client\CustomFieldManager' => $customFieldManager));
-        $model['Id'] = 42;
+        $model = $this->getModel(array('Model\Client\CustomFieldManager' => $customFieldManager));
+        $model->Id = 42;
 
         $model->setCustomFields('data');
     }
 
     public function testToDomDocument()
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
 
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->setServiceLocator($serviceManager);
 
-        $inventoryRequest = $this->getMock('Protocol\Message\InventoryRequest');
-        $inventoryRequest->expects($this->exactly(2))->method('loadClient')->with(
-            $model,
-            $serviceManager
-        );
+        // DomDocument constructor must be preserved. Otherwise setting the
+        // formatOutput property would have no effect for whatever reason.
+        $inventoryRequest = $this->getMockBuilder(\Protocol\Message\InventoryRequest::class)
+                                 ->setConstructorArgs(
+                                     [$this->createStub(\Protocol\Message\InventoryRequest\Content::class)]
+                                 )->getMock();
+        $inventoryRequest->expects($this->once())->method('loadClient')->with($model);
 
         $serviceManager->method('get')->with('Protocol\Message\InventoryRequest')->willReturn($inventoryRequest);
 
-        $document1 = $model->toDomDocument();
-        $this->assertInstanceOf('Protocol\Message\InventoryRequest', $document1);
-
-        $document2 = $model->toDomDocument();
-        $this->assertInstanceOf('Protocol\Message\InventoryRequest', $document2);
-
-        $this->assertNotSame($document1, $document2); // Test prototype cloning
+        $document = $model->toDomDocument();
+        $this->assertInstanceOf('Protocol\Message\InventoryRequest', $document);
+        $this->assertTrue($document->formatOutput);
     }
 }

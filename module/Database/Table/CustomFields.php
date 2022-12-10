@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "accountinfo" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "accountinfo" table
@@ -30,9 +31,31 @@ class CustomFields extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'accountinfo';
         parent::__construct($serviceLocator);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @codeCoverageIgnore
+     */
+    public static function getObsoleteColumns($logger, $schema, $database)
+    {
+        $obsoleteColumns = parent::getObsoleteColumns($logger, $schema, $database);
+        // Preserve columns which were added through the user interface.
+        $preserveColumns = array();
+        // accountinfo_config may not exist yet when populating an empty
+        // database. In that case, there are no obsolete columns.
+        if (in_array('accountinfo_config', $database->getTableNames())) {
+            $fields = $database->query(
+                "SELECT id FROM accountinfo_config WHERE name_accountinfo IS NULL AND account_type = 'COMPUTERS'"
+            );
+            foreach ($fields as $field) {
+                $preserveColumns[] = "fields_$field[id]";
+            }
+        }
+        return array_diff($obsoleteColumns, $preserveColumns);
     }
 }

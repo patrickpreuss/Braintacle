@@ -47,21 +47,43 @@ place the Braintacle directory there. The recommended location is
 documentation, and also used by the sample configuration.
 
 
-Set up libraries and PHP environment
-------------------------------------
+Set up dependencies
+-------------------
 
-If not already present on your system, download and extract [Zend Framework
-2.4.8 or later](http://framework.zend.com/downloads/latest#ZF2)
-and [NADA](https://github.com/hschletz/NADA/archive/master.zip) to an arbitrary
-location (for example, /usr/local/share/php).
+Install [Composer](https://getcomposer.org/). From the Braintacle root
+directory, run:
 
-These libraries don't need extra setup, but must reside within PHP's include
-path, which can be set the usual way. If you don't want to mess with php.ini
-globally, you can set the path in the Apache configuration per application (as
-proposed in the config template, see below). For the command line tools, the
-path can be given via the `-d` option:
+    composer install --no-dev
 
-    php -d include_path=/usr/local/share/php/Zend/library:/usr/local/share/php/NADA ...
+This will download all dependencies and set up the autoloader. Omit the
+`--no-dev` option if you want to run tests via the development/run-tests.php
+script.
+
+
+Set up the configuration file
+-----------------------------
+
+The file config/braintacle.ini.template is a template for the configuration
+file. Don't edit it directly because it may be overwritten upon upgrades. Copy,
+move or rename it instead.
+
+By default, Braintacle will look for a file config/braintacle.ini relative to
+the Braintacle root directory. If you prefer a different location (/etc,
+/usr/local/etc ...), you can set the BRAINTACLE_CONFIG environment variable to
+the full path (including filename) of your config file. The command line tool
+(braintacle-tool.php) additionally accepts an optional "--config" argument which
+will take precedence over the environment variable or the default location.
+
+The file must be readable by the webserver, but should not be readable for the
+rest of the world if it contains a sensitive database password. For example, if
+the webserver runs in the 'www-data' group:
+
+    chown root:www-data /usr/local/share/braintacle/config/braintacle.ini
+    chmod 640 /usr/local/share/braintacle/config/braintacle.ini
+
+Edit your configuration according to the comments within the file. As a minimum,
+the "database" section must be set up for the database you're about to create in
+the next step. Everything else is mostly useful for development purposes.
 
 
 Set up the database
@@ -81,28 +103,17 @@ For PostgreSQL, run:
 For MySQL, run:
 
     CREATE USER username IDENTIFIED BY 'passwd';
-    CREATE DATABASE braintacle CHARACTER SET utf8;
+    CREATE DATABASE braintacle CHARACTER SET utf8mb4;
     GRANT ALL ON braintacle.* TO username;
 
 You can choose any database name, user name and password.
 
-Copy or rename the file /usr/local/share/braintacle/config/braintacle.ini.template
-to /usr/local/share/braintacle/config/braintacle.ini and adjust its content
-according to the comments within the file. This file must be readable by the
-webserver, but should not be readable for the rest of the world. For example, if
-the webserver runs in the 'www-data' group:
-
-    chown root:www-data /usr/local/share/braintacle/config/database.ini
-    chmod 640 /usr/local/share/braintacle/config/database.ini
-
-If you prefer all config files within /etc or /usr/local/etc, make
-/usr/local/share/braintacle/config/database.ini a symbolic link to the actual
-file.
-
 To create and initialize the tables, log out from the database and run the
-database manager script:
+database manager script (the --config option can be omitted if your config file
+resides in the default location or is set via the BRAINTACLE_CONFIG environment
+variable, see previous section for details):
 
-    /usr/local/share/braintacle/tools/database-manager.php
+    braintacle-tool.php database --config=/etc/braintacle.ini
 
 If everything ran correctly, you should now be able to log into the database
 with the configured credentials and see the tables.
@@ -213,14 +224,6 @@ edit it to suit your needs.
 To finish installation, reload the Apache configuration. Your system is now
 ready to accept client connections.
 
-Depending on your configuration, you may see some errors in the Apache log file
-like this:
-
-    braintacle-server: Can't load SOAP::Transport::HTTP* - Web service will be unavailable
-
-These messages are harmless and can be ignored if you don't plan to use the
-(unsupported) SOAP service.
-
 
 Set up the administration console
 ---------------------------------
@@ -255,10 +258,12 @@ access for the web server. Uploaded packages will be stored in this directory.
     chown www-data:www-data /var/lib/braintacle/download
     chmod 775 /var/lib/braintacle/download
 
-In the administration console, enter the path unter Preferences->Packages. In
+In the administration console, enter the path unter Preferences->Download. In
 the same dialog, you have to specify 2 URLs (1 for HTTP, 1 for HTTPS) which must
 point to this directory. An Apache template
-(config/braintacle-download.conf.template) is provided for this purpose.
+(config/braintacle-download.conf.template) is provided for this purpose. The
+default path (unless configured differently in braintacle-download.conf) is
+/braintacle-download, i.e. http://example.net/braintacle-download .
 
 
 Set up the clients for inventory
@@ -266,14 +271,17 @@ Set up the clients for inventory
 
 Braintacle does not provide its own client application. On the client machines,
 install either the
-[OCS Inventory NG agent](http://www.ocsinventory-ng.org/en/download/download-agent.html) or
+[OCS Inventory NG agent](https://github.com/OCSInventory-NG/) or
 [FusionInventory Agent](http://www.fusioninventory.org/documentation/agent/installation/).
 Refer to the agent documentation for details. The agent must be configured for
-the URL of Braintacle's server component.
+the URL of Braintacle's server component. The default path (unless configured 
+differently in braintacle-server.conf) is /braintacle-server, i.e.
+http://example.net/braintacle-server .
 
 To be able to use agents other than the OCS Inventory NG agent, a file with
 whitelisted agent names is required. Such a file is provided in
-config/allowed-agents.template. Setup instructions are provided in that file.
+config/allowed-agents.template. Setup instructions are provided in that
+file.
 
 
 
@@ -287,16 +295,12 @@ required steps will be noted in the [changelog](./CHANGELOG.txt). If you skipped
 a release, follow the instructions for the skipped releases first.
 
 A common upgrade step is the database schema update. This is done with the
-database-manager.php script:
+database manager script:
 
-    /usr/local/share/braintacle/tools/database-manager.php
+    /usr/local/share/braintacle/braintacle-tool.php database
 
 Although the schema update is usually safe, a database backup is recommended. It
 is also safe to run the script even if there is nothing to update.
-
-If you run Braintacle directly off a git tree, upgrading is very easy: you can
-use the script tools/update-from-git.sh which pulls the latest code and invokes
-database-manager.php.
 
 
 
@@ -324,7 +328,7 @@ Some features are not supported and assumed not to be used in the database:
 - Braintacle assumes exactly 1 download server per package. Delete additional
   server entries. Use the same server URL for all packages.
 
-- The SOAP service us unsupported and untested.
+- The SOAP service is unavailable.
 
 See the [main documentation](./doc/index.html) for a more detailed description
 of differences.
@@ -334,8 +338,9 @@ Converting the database
 -----------------------
 
 Backing up the database before conversion is strongly recommended. Run
-database-manager.php as documented above; it should be able to convert the
-database.
+database manager as documented above; it should be able to convert the database.
+It does not handle the database charset. Convert it to "utf8mb4" if it still
+uses a different charset.
 
 
 Replacing the server component

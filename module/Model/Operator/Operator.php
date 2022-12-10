@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Braintacle operator account
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -33,6 +34,6 @@ namespace Model\Operator;
  * @property string $MailAddress E-Mail address (optional)
  * @property string $Comment Comment (optional)
  */
-class Operator extends \ArrayObject
+class Operator extends \Model\AbstractModel
 {
 }

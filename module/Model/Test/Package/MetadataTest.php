@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Package\Metadata
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,7 @@
  */
 
 namespace Model\Test\Package;
+
 use Model\Package\Metadata;
 
 /**
@@ -30,16 +32,17 @@ class MetadataTest extends \Model\Test\AbstractTest
     /** {@inheritdoc} */
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
-    public function testsetPackageData()
+    public function testSetPackageData()
     {
         $data = array(
             'Id' => '12345678',
             'Priority' => '5',
             'DeployAction' => 'store',
             'ActionParam' => '',
+            'HashType' => 'hash_type',
             'Hash' => 'hash',
             'NumFragments' => '42',
             'Warn' => '0',
@@ -49,11 +52,11 @@ class MetadataTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => '0',
             'PostInstMessage' => '',
         );
-        $model = new Metadata;
+        $model = new Metadata();
         $model->setPackageData($data);
 
         $this->assertEquals(1, $model->childNodes->length);
-        $node = $model->firstChild;
+        $node = $model->documentElement;
         $this->assertEquals('DOWNLOAD', $node->tagName);
         $this->assertFalse($node->hasChildNodes());
 
@@ -62,7 +65,7 @@ class MetadataTest extends \Model\Test\AbstractTest
         $this->assertEquals('hash', $node->getAttribute('DIGEST'));
         $this->assertEquals('HTTP', $node->getAttribute('PROTO'));
         $this->assertEquals('42', $node->getAttribute('FRAGS'));
-        $this->assertEquals('SHA1', $node->getAttribute('DIGEST_ALGO'));
+        $this->assertEquals('HASH_TYPE', $node->getAttribute('DIGEST_ALGO'));
         $this->assertEquals('Hexa', $node->getAttribute('DIGEST_ENCODE'));
         $this->assertEquals('warn_message&quot;<br><br>', $node->getAttribute('NOTIFY_TEXT'));
         $this->assertEquals('23', $node->getAttribute('NOTIFY_COUNTDOWN'));
@@ -87,13 +90,14 @@ class MetadataTest extends \Model\Test\AbstractTest
      * @param string $name Expected value for "NAME" attribute
      * @param string $command Expected value for "COMMAND" attribute
      */
-    public function testsetPackageDataActionParams($action, $act, $path, $name, $command)
+    public function testSetPackageDataActionParams($action, $act, $path, $name, $command)
     {
         $data = array(
             'Id' => '12345678',
             'Priority' => '5',
             'DeployAction' => $action,
             'ActionParam' => 'action_param',
+            'HashType' => 'hash_type',
             'Hash' => 'hash',
             'NumFragments' => '0',
             'Warn' => '0',
@@ -103,9 +107,9 @@ class MetadataTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => '0',
             'PostInstMessage' => '',
         );
-        $model = new Metadata;
+        $model = new Metadata();
         $model->setPackageData($data);
-        $node = $model->firstChild;
+        $node = $model->documentElement;
 
         $this->assertEquals($act, $node->getAttribute('ACT'));
         $this->assertEquals($path, $node->getAttribute('PATH'));
@@ -140,6 +144,7 @@ class MetadataTest extends \Model\Test\AbstractTest
             'Priority' => '5',
             'DeployAction' => 'store',
             'ActionParam' => '',
+            'HashType' => 'hash_type',
             'Hash' => '',
             'NumFragments' => '0',
             'Warn' => $input,
@@ -149,9 +154,9 @@ class MetadataTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => $input,
             'PostInstMessage' => '',
         );
-        $model = new Metadata;
+        $model = new Metadata();
         $model->setPackageData($data);
-        $node = $model->firstChild;
+        $node = $model->documentElement;
         $this->assertSame($expected, $node->getAttribute('NOTIFY_USER'));
         $this->assertSame($expected, $node->getAttribute('NOTIFY_CAN_ABORT'));
         $this->assertSame($expected, $node->getAttribute('NOTIFY_CAN_DELAY'));
@@ -177,11 +182,12 @@ class MetadataTest extends \Model\Test\AbstractTest
      */
     public function testSetPackageDataPostinstMessage($inputMessage, $documentMessage, $documentFlag)
     {
-         $data = array(
+        $data = array(
             'Id' => '12345678',
             'Priority' => '5',
             'DeployAction' => 'store',
             'ActionParam' => '',
+            'HashType' => 'hash_type',
             'Hash' => 'hash',
             'NumFragments' => '42',
             'Warn' => '0',
@@ -191,20 +197,21 @@ class MetadataTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => '0',
             'PostInstMessage' => $inputMessage,
         );
-        $model = new Metadata;
+        $model = new Metadata();
         $model->setPackageData($data);
-        $node = $model->firstChild;
+        $node = $model->documentElement;
         $this->assertSame($documentFlag, $node->getAttribute('NEED_DONE_ACTION'));
         $this->assertSame($documentMessage, $node->getAttribute('NEED_DONE_ACTION_TEXT'));
     }
 
-    public function testsetPackageDataOverwrite()
+    public function testSetPackageDataOverwrite()
     {
         $data = array(
             'Id' => '12345678',
             'Priority' => '5',
             'DeployAction' => 'store',
             'ActionParam' => '',
+            'HashType' => 'hash_type',
             'Hash' => '',
             'NumFragments' => '0',
             'Warn' => '0',
@@ -214,11 +221,11 @@ class MetadataTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => '0',
             'PostInstMessage' => '',
         );
-        $model = new Metadata;
+        $model = new Metadata();
         $model->setPackageData($data);
         $data['Priority'] = 7;
         $model->setPackageData($data);
-        $this->assertEquals(7, $model->firstChild->getAttribute('PRI'));
+        $this->assertEquals(7, $model->documentElement->getAttribute('PRI'));
     }
 
     /**
@@ -234,7 +241,7 @@ class MetadataTest extends \Model\Test\AbstractTest
     {
         $messageEscaped = '&quot;<br><br/><br /><BR>';
         $messageUnescaped = "\"\n\n\n\n";
-        $model = new Metadata;
+        $model = new Metadata();
         $node = $model->createElement('DOWNLOAD');
         $node->setAttribute('ID', '1');
         $node->setAttribute('PRI', '5');
@@ -290,7 +297,7 @@ class MetadataTest extends \Model\Test\AbstractTest
      */
     public function testGetPackageDataPostinstMessage($documentFlag, $documentMessage, $resultMessage)
     {
-        $model = new Metadata;
+        $model = new Metadata();
         $node = $model->createElement('DOWNLOAD');
         $node->setAttribute('ID', '1');
         $node->setAttribute('PRI', '5');
@@ -318,8 +325,9 @@ class MetadataTest extends \Model\Test\AbstractTest
 
     public function testGetPackageDataForcesValidDocument()
     {
-        $this->setExpectedException('RuntimeException', 'Validation of XML document failed');
-        $model = new Metadata;
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('Validation of XML document failed');
+        $model = new Metadata();
         @$model->getPackageData();
     }
 }

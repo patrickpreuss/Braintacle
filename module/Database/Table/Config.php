@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "config" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "config" table
@@ -40,13 +41,15 @@ class Config extends \Database\AbstractTable
         'defaultDeleteInterfaces' => 'BRAINTACLE_DEFAULT_DELETE_INTERFACES',
         'defaultDeployError' => 'BRAINTACLE_DEFAULT_DEPLOY_ERROR',
         'defaultDeployGroups' => 'BRAINTACLE_DEFAULT_DEPLOY_GROUPS',
-        'defaultDeployNonnotified' => 'BRAINTACLE_DEFAULT_DEPLOY_NONNOTIFIED',
-        'defaultDeployNotified' => 'BRAINTACLE_DEFAULT_DEPLOY_NOTIFIED',
+        'defaultDeployPending' => 'BRAINTACLE_DEFAULT_DEPLOY_NONNOTIFIED',
+        'defaultDeployRunning' => 'BRAINTACLE_DEFAULT_DEPLOY_NOTIFIED',
         'defaultDeploySuccess' => 'BRAINTACLE_DEFAULT_DEPLOY_SUCCESS',
         'defaultMaxFragmentSize' => 'BRAINTACLE_DEFAULT_MAX_FRAGMENT_SIZE',
+        'defaultMergeConfig' => 'BRAINTACLE_DEFAULT_MERGE_CONFIG',
+        'defaultMergeCustomFields' => 'BRAINTACLE_DEFAULT_MERGE_USERDEFINED',
         'defaultMergeGroups' => 'BRAINTACLE_DEFAULT_MERGE_GROUPS',
         'defaultMergePackages' => 'BRAINTACLE_DEFAULT_MERGE_PACKAGES',
-        'defaultMergeCustomFields' => 'BRAINTACLE_DEFAULT_MERGE_USERDEFINED',
+        'defaultMergeProductKey' => 'BRAINTACLE_DEFAULT_MERGE_PRODUCT_KEY',
         'defaultPackagePriority' => 'BRAINTACLE_DEFAULT_PACKAGE_PRIORITY',
         'defaultPlatform' => 'BRAINTACLE_DEFAULT_PLATFORM',
         'defaultPostInstMessage' => 'BRAINTACLE_DEFAULT_USER_ACTION_MESSAGE',
@@ -88,6 +91,7 @@ class Config extends \Database\AbstractTable
         'sessionValidity' => 'SESSION_VALIDITY_TIME',
         'setGroupPackageStatus' => 'DOWNLOAD_GROUPS_TRACE_EVENTS',
         'trustedNetworksOnly' => 'PROLOG_FILTER_ON',
+        'validateXml' => 'BRAINTACLE_VALIDATE_XML',
     );
 
     /**
@@ -133,13 +137,15 @@ class Config extends \Database\AbstractTable
         'defaultDeleteInterfaces',
         'defaultDeployError',
         'defaultDeployGroups',
-        'defaultDeployNonnotified',
-        'defaultDeployNotified',
+        'defaultDeployPending',
+        'defaultDeployRunning',
         'defaultDeploySuccess',
         'defaultMaxFragmentSize',
+        'defaultMergeConfig',
+        'defaultMergeCustomFields',
         'defaultMergeGroups',
         'defaultMergePackages',
-        'defaultMergeCustomFields',
+        'defaultMergeProductKey',
         'defaultPackagePriority',
         'defaultWarn',
         'defaultWarnAllowAbort',
@@ -147,13 +153,14 @@ class Config extends \Database\AbstractTable
         'defaultWarnCountdown',
         'displayBlacklistedSoftware',
         'schemaVersion',
+        'validateXml',
     );
 
     /**
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _postSetSchema($logger, $schema, $database)
+    protected function postSetSchema($logger, $schema, $database, $prune)
     {
         // If packagePath has not been converted yet, append /download directory
         // with had previously been appended automatically.
@@ -165,7 +172,6 @@ class Config extends \Database\AbstractTable
 
         // If no communication server URI is set, try to generate it from the
         // obsolete Host/Port options
-        $this->columns = array();
         $server = array();
         foreach ($this->select("name LIKE 'LOCAL%'") as $option) {
             $server[$option->name] = array(
@@ -174,12 +180,12 @@ class Config extends \Database\AbstractTable
             );
         }
         if (!isset($server['LOCAL_URI_SERVER']) and isset($server['LOCAL_SERVER'])) {
-            $uri = \Zend\Uri\UriFactory::factory('http:');
+            $uri = \Laminas\Uri\UriFactory::factory('http:');
             $uri->setHost($server['LOCAL_SERVER']['tvalue']);
             if (isset($server['LOCAL_PORT'])) {
                 $uri->setPort($server['LOCAL_PORT']['ivalue']);
             }
-            $uri->setPath('/ocsinventory');
+            $uri->setPath('/braintacle-server');
             $uri = $uri->toString();
 
             $logger->info(
@@ -241,19 +247,19 @@ class Config extends \Database\AbstractTable
     public function get($option)
     {
         // limitInventoryInterval is only meaningful if enabled.
-        if ($option == 'limitInventoryInterval' and
+        if (
+            $option == 'limitInventoryInterval' and
             !$this->select(array('name' => 'INVENTORY_FILTER_FLOOD_IP'))->current()['ivalue']
         ) {
             return null;
         }
         $name = $this->getDbIdentifier($option);
-        $column = $this->_getColumnName($option);
-        $this->columns = array($column);
+        $column = $this->getColumnName($option);
         $row = $this->select(array('name' => $name))->current();
         if ($row) {
             $value = $row[$column];
             if (in_array($option, $this->_iValues) or in_array($option, $this->_integerOptions)) {
-                $value = (integer) $value;
+                $value = (int) $value;
             }
         } else {
             $value = null;
@@ -272,12 +278,11 @@ class Config extends \Database\AbstractTable
     public function set($option, $value)
     {
         $name = $this->getDbIdentifier($option);
-        $column = $this->_getColumnName($option);
-        if ($value === false) {
-            // Would otherwise be cast to empty string
-            $value = 0;
-        }
-        if ($column == 'ivalue') {
+        $column = $this->getColumnName($option);
+        if (is_bool($value)) {
+            // Prevent improper bool-to-string conversion in PHP and/or database
+            $value = (int) $value;
+        } elseif ($column == 'ivalue') {
             if ($value === '') {
                 $value = null;
             } elseif (!preg_match('/^-?[0-9]+$/', $value)) {
@@ -286,9 +291,9 @@ class Config extends \Database\AbstractTable
                 );
             }
         }
-        $valueChanged = $this->_set($name, $column, $value);
+        $valueChanged = $this->write($name, $column, $value);
         if ($valueChanged and $option == 'limitInventoryInterval') {
-            $this->_set('INVENTORY_FILTER_FLOOD_IP', 'ivalue', (integer) (bool) $value);
+            $this->write('INVENTORY_FILTER_FLOOD_IP', 'ivalue', (int) (bool) $value);
         }
         return $valueChanged;
     }
@@ -301,13 +306,13 @@ class Config extends \Database\AbstractTable
      * @param mixed $value Option value
      * @return bool TRUE if value changed
      */
-    protected function _set($name, $column, $value)
+    protected function write($name, $column, $value)
     {
         $valueChanged = true;
-        $this->columns = array($column);
         $row = $this->select(array('name' => $name))->current();
         if ($row) {
-            $oldValue = $row->$column;
+            // Compare values as strings for portability
+            $oldValue = (string) $row->$column;
             if ($oldValue === (string) $value) {
                 $valueChanged = false;
             } else {
@@ -348,7 +353,7 @@ class Config extends \Database\AbstractTable
      * @param string $option Option name
      * @return string "ivalue" or "tvalue"
      */
-    protected function _getColumnName($option)
+    protected function getColumnName($option)
     {
         return in_array($option, $this->_iValues) ? 'ivalue' : 'tvalue';
     }

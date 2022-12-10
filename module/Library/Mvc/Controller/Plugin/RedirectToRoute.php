@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Redirect to standard route (controller/action)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,14 +22,25 @@
 
 namespace Library\Mvc\Controller\Plugin;
 
+use Laminas\Mvc\Controller\Plugin\Redirect;
+
 /**
  * Redirect to standard route (controller/action)
  *
- * This is a convenient alternative to ZF's Redirect plugin which composes the
- * redirect URL via the UrlFromRoute plugin.
+ * This is a convenient alternative to Laminas' Redirect plugin which composes
+ * the redirect URL via the UrlFromRoute plugin.
  */
-class RedirectToRoute extends \Zend\Mvc\Controller\Plugin\AbstractPlugin
+class RedirectToRoute extends \Laminas\Mvc\Controller\Plugin\AbstractPlugin
 {
+    private Redirect $redirectPlugin;
+    private UrlFromRoute $urlFromRoutePlugin;
+
+    public function __construct(Redirect $redirectPlugin, UrlFromRoute $urlFromRoutePlugin)
+    {
+        $this->redirectPlugin = $redirectPlugin;
+        $this->urlFromRoutePlugin = $urlFromRoutePlugin;
+    }
+
     /**
      * Redirect to given route
      *
@@ -38,13 +50,12 @@ class RedirectToRoute extends \Zend\Mvc\Controller\Plugin\AbstractPlugin
      * @param string $controllerName Controller name. If empty, the default controller is used.
      * @param string $action Action name. If empty, the default action is used.
      * @param array $params Associative array of URL parameters
-     * @return \Zend\Http\Response Redirect response
+     * @return \Laminas\Http\Response Redirect response
      */
-    function __invoke($controllerName=null, $action=null, array $params=array())
+    public function __invoke($controllerName = null, $action = null, array $params = array())
     {
-        $controller = $this->getController();
-        return $controller->redirect()->toUrl(
-            $controller->urlFromRoute($controllerName, $action, $params)
+        return $this->redirectPlugin->toUrl(
+            ($this->urlFromRoutePlugin)($controllerName, $action, $params)
         );
     }
 }

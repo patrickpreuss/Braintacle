@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Group\GroupManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,8 +22,22 @@
 
 namespace Model\Test\Group;
 
+use Database\Table\ClientConfig;
+use Database\Table\ClientsAndGroups;
+use Database\Table\GroupInfo;
+use Database\Table\GroupMemberships;
+use DateTime;
+use Laminas\Db\Adapter\Driver\ConnectionInterface;
+use Laminas\ServiceManager\ServiceManager;
+use Mockery;
+use Model\Group\Group;
+use Model\Group\GroupManager;
+use PHPUnit\Framework\MockObject\MockObject;
+
 class GroupManagerTest extends AbstractGroupTest
 {
+    use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+
     /** {@inheritdoc} */
     protected static $_tables = array('ClientConfig', 'ClientsAndGroups', 'GroupMemberships');
 
@@ -61,23 +76,20 @@ class GroupManagerTest extends AbstractGroupTest
      */
     public function testGetGroups($filter, $filterArg, $order, $direction, $expected, $updateCache)
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
         $serviceManager->method('get')->willReturnMap(
             array(
-                array('Database\Table\GroupInfo', true, $this->_groupInfo),
-                array('Library\Now', true, new \DateTime('2015-02-08 19:36:29')),
-                array('Model\Config', true, $this->_config),
+                array('Database\Table\GroupInfo', $this->_groupInfo),
+                array('Library\Now', new \DateTime('2015-02-08 19:36:29')),
+                array('Model\Config', $this->_config),
             )
         );
 
-        $model = $this->getMockBuilder('Model\Group\GroupManager')
-                      ->setMethods(array('updateCache'))
-                      ->setConstructorArgs(array($serviceManager))
-                      ->getMock();
-        $model->expects($this->$updateCache())->method('updateCache');
+        $model = Mockery::mock(GroupManager::class, [$serviceManager])->makePartial();
+        $model->shouldReceive('updateCache')->$updateCache();
 
         $resultSet = $model->getGroups($filter, $filterArg, $order, $direction);
-        $this->assertInstanceOf('Zend\Db\ResultSet\AbstractResultSet', $resultSet);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\AbstractResultSet', $resultSet);
         $groups = iterator_to_array($resultSet);
         $this->assertContainsOnlyInstancesOf('Model\Group\Group', $groups);
         $this->assertCount(count($expected), $groups);
@@ -88,14 +100,24 @@ class GroupManagerTest extends AbstractGroupTest
 
     public function testGetGroupsInvalidFilter()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Invalid group filter: invalid');
-        $model = $this->_getModel(array('Database\Table\GroupInfo' => $this->_groupInfo));
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Invalid group filter: invalid');
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->with(GroupInfo::class)->willReturn($this->_groupInfo);
+
+        $model = new GroupManager($serviceManager);
         $resultSet = $model->getGroups('invalid');
     }
 
     public function testGetGroup()
     {
-        $model = $this->_getModel(array('Database\Table\GroupInfo' => $this->_groupInfo));
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->with(GroupInfo::class)->willReturn($this->_groupInfo);
+
+        $model = new GroupManager($serviceManager);
         $group = $model->getGroup('name2');
         $this->assertInstanceOf('Model\Group\Group', $group);
         $this->assertEquals('name2', $group['Name']);
@@ -103,15 +125,22 @@ class GroupManagerTest extends AbstractGroupTest
 
     public function testGetGroupNonExistentGroup()
     {
-        $this->setExpectedException('RuntimeException', 'Unknown group name: invalid');
-        $model = $this->_getModel(array('Database\Table\GroupInfo' => $this->_groupInfo));
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('Unknown group name: invalid');
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->with(GroupInfo::class)->willReturn($this->_groupInfo);
+
+        $model = new GroupManager($serviceManager);
         $group = $model->getGroup('invalid');
     }
 
     public function testGetGroupNoName()
     {
-        $this->setExpectedException('InvalidArgumentException', 'No group name given');
-        $model = $this->_getModel();
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('No group name given');
+        $model = $this->getModel();
         $group = $model->getGroup('');
     }
 
@@ -128,54 +157,63 @@ class GroupManagerTest extends AbstractGroupTest
      */
     public function testCreateGroup($description, $expectedDescription)
     {
-        $model = $this->_getModel(
-            array(
-                'Database\Table\GroupInfo' => $this->_groupInfo,
-                'Library\Now' => new \DateTime('2015-02-12 22:07:00'),
-            )
-        );
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            ['Library\Now', new DateTime('2015-02-12 22:07:00')],
+            ['Database\Nada', static::$serviceManager->get('Database\Nada')],
+            ['Db', static::$serviceManager->get('Db')],
+            [ClientsAndGroups::class, static::$serviceManager->get(ClientsAndGroups::class)],
+            [GroupInfo::class, $this->_groupInfo],
+        ]);
+
+        $model = new GroupManager($serviceManager);
         $model->createGroup('name3', $description);
 
-        $table = \Library\Application::getService('Database\Table\ClientsAndGroups');
+        $table = static::$serviceManager->get('Database\Table\ClientsAndGroups');
         $id = $table->select(array('name' => 'name3', 'deviceid' => '_SYSTEMGROUP_'))->current()['id'];
-        $dataSet = new \PHPUnit_Extensions_Database_DataSet_ReplacementDataSet($this->_loadDataSet('CreateGroup'));
+        $dataSet = new \PHPUnit\DbUnit\DataSet\ReplacementDataSet($this->loadDataSet('CreateGroup'));
         $dataSet->addFullReplacement('#ID#', $id);
         $dataSet->addFullReplacement('#DESCRIPTION#', $expectedDescription);
         $connection = $this->getConnection();
         $this->assertTablesEqual(
             $dataSet->getTable('hardware'),
             $connection->createQueryTable(
-                'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                'hardware',
+                'SELECT id, deviceid, name, description, lastdate FROM hardware'
             )
         );
         $this->assertTablesEqual(
             $dataSet->getTable('groups'),
             $connection->createQueryTable(
-                'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                'groups',
+                'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
             )
         );
     }
 
     public function testCreateGroupEmptyName()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         try {
             $model->createGroup('');
             $this->fail('Expected exception was not thrown');
         } catch (\InvalidArgumentException $e) {
             $this->assertEquals('Group name is empty', $e->getMessage());
-            $dataSet = $this->_loadDataSet();
+            $dataSet = $this->loadDataSet();
             $connection = $this->getConnection();
             $this->assertTablesEqual(
                 $dataSet->getTable('hardware'),
                 $connection->createQueryTable(
-                    'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                    'hardware',
+                    'SELECT id, deviceid, name, description, lastdate FROM hardware'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups'),
                 $connection->createQueryTable(
-                    'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                    'groups',
+                    'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
                 )
             );
         }
@@ -183,102 +221,159 @@ class GroupManagerTest extends AbstractGroupTest
 
     public function testCreateGroupExists()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         try {
             $model->createGroup('name2');
             $this->fail('Expected exception was not thrown');
         } catch (\RuntimeException $e) {
             $this->assertEquals('Group already exists: name2', $e->getMessage());
-            $dataSet = $this->_loadDataSet();
+            $dataSet = $this->loadDataSet();
             $connection = $this->getConnection();
             $this->assertTablesEqual(
                 $dataSet->getTable('hardware'),
                 $connection->createQueryTable(
-                    'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                    'hardware',
+                    'SELECT id, deviceid, name, description, lastdate FROM hardware'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups'),
                 $connection->createQueryTable(
-                    'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                    'groups',
+                    'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
                 )
             );
         }
     }
 
+    public function testCreateGroupRollbackOnException()
+    {
+        $connection = $this->createMock(ConnectionInterface::class);
+        $connection->expects($this->once())->method('beginTransaction');
+        $connection->expects($this->once())->method('rollback');
+        $connection->expects($this->never())->method('commit');
+
+        $driver = $this->createMock('Laminas\Db\Adapter\Driver\DriverInterface');
+        $driver->method('getConnection')->willReturn($connection);
+
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
+        $adapter->method('getDriver')->willReturn($driver);
+
+        $resultSet = $this->createMock('Laminas\Db\ResultSet\AbstractResultSet');
+        $resultSet->method('count')->willReturn(0);
+
+        $clientsAndGroups = $this->createMock('Database\Table\ClientsAndGroups');
+        $clientsAndGroups->method('select')->willReturn($resultSet);
+        $clientsAndGroups->method('insert')->willThrowException(new \RuntimeException('test message'));
+
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test message');
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            ['Db', $adapter],
+            ['Database\Nada', static::$serviceManager->get('Database\Nada')],
+            ['Library\Now', static::$serviceManager->get('Library\Now')],
+            [ClientsAndGroups::class, $clientsAndGroups],
+        ]);
+
+        $model = new GroupManager($serviceManager);
+        $model->createGroup('name', 'description');
+    }
+
     public function testDeleteGroup()
     {
-        $group = $this->getMock('Model\Group\Group');
-        $group->expects($this->at(0))->method('lock')->willReturn(true);
-        $group->expects($this->at(1))->method('offsetGet')->with('Id')->willReturn(1);
-        $group->expects($this->at(2))->method('unlock');
+        /** @var MockObject|Group */
+        $group = $this->createMock('Model\Group\Group');
+        $group->method('lock')->willReturn(true);
+        $group->method('offsetGet')->with('Id')->willReturn(1);
+        $group->expects($this->once())->method('unlock');
 
-        $model = $this->_getModel(array('Database\Table\GroupInfo' => $this->_groupInfo));
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            ['Db', static::$serviceManager->get('Db')],
+            [ClientConfig::class, static::$serviceManager->get(ClientConfig::class)],
+            [ClientsAndGroups::class, static::$serviceManager->get(ClientsAndGroups::class)],
+            [GroupMemberships::class, static::$serviceManager->get(GroupMemberships::class)],
+            [GroupInfo::class, $this->_groupInfo],
+        ]);
+
+        $model = new GroupManager($serviceManager);
         $model->deleteGroup($group);
 
-        $dataSet = $this->_loadDataSet('DeleteGroup');
+        $dataSet = $this->loadDataSet('DeleteGroup');
         $connection = $this->getConnection();
         $this->assertTablesEqual(
             $dataSet->getTable('hardware'),
             $connection->createQueryTable(
-                'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                'hardware',
+                'SELECT id, deviceid, name, description, lastdate FROM hardware'
             )
         );
         $this->assertTablesEqual(
             $dataSet->getTable('groups'),
             $connection->createQueryTable(
-                'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                'groups',
+                'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
             )
         );
         $this->assertTablesEqual(
             $dataSet->getTable('groups_cache'),
             $connection->createQueryTable(
-                'groups_cache', 'SELECT hardware_id, group_id FROM groups_cache'
+                'groups_cache',
+                'SELECT hardware_id, group_id FROM groups_cache'
             )
         );
         $this->assertTablesEqual(
             $dataSet->getTable('devices'),
             $connection->createQueryTable(
-                'devices', 'SELECT hardware_id, name, ivalue FROM devices'
+                'devices',
+                'SELECT hardware_id, name, ivalue FROM devices'
             )
         );
     }
 
     public function testDeleteGroupLocked()
     {
-        $group = $this->getMock('Model\Group\Group');
-        $group->expects($this->at(0))->method('lock')->willReturn(false);
+        $group = $this->createMock('Model\Group\Group');
+        $group->method('lock')->willReturn(false);
 
-        $model = $this->_getModel();
+        $model = $this->getModel();
         try {
             $model->deleteGroup($group);
             $this->fail('Expected exception was not thrown');
         } catch (\Model\Group\RuntimeException $e) {
             $this->assertEquals('Cannot delete group because it is locked', $e->getMessage());
-            $dataSet = $this->_loadDataSet();
+            $dataSet = $this->loadDataSet();
             $connection = $this->getConnection();
             $this->assertTablesEqual(
                 $dataSet->getTable('hardware'),
                 $connection->createQueryTable(
-                    'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                    'hardware',
+                    'SELECT id, deviceid, name, description, lastdate FROM hardware'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups'),
                 $connection->createQueryTable(
-                    'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                    'groups',
+                    'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups_cache'),
                 $connection->createQueryTable(
-                    'groups_cache', 'SELECT group_id, hardware_id, static FROM groups_cache'
+                    'groups_cache',
+                    'SELECT group_id, hardware_id, static FROM groups_cache'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('devices'),
                 $connection->createQueryTable(
-                    'devices', 'SELECT hardware_id, name, ivalue FROM devices'
+                    'devices',
+                    'SELECT hardware_id, name, ivalue FROM devices'
                 )
             );
         }
@@ -286,49 +381,57 @@ class GroupManagerTest extends AbstractGroupTest
 
     public function testDeleteGroupDatabaseError()
     {
-        $group = $this->getMock('Model\Group\Group');
-        $group->expects($this->at(0))->method('lock')->willReturn(true);
+        /** @var MockObject|Group */
+        $group = $this->createMock('Model\Group\Group');
+        $group->method('lock')->willReturn(true);
 
-        $clientsAndGroups = $this->getMockBuilder('Database\Table\ClientsAndGroups')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $clientsAndGroups = $this->createMock(ClientsAndGroups::class);
         $clientsAndGroups->method('delete')->will($this->throwException(new \RuntimeException('database error')));
 
-        $model = $this->_getModel(
-            array(
-                'Database\Table\ClientsAndGroups' => $clientsAndGroups,
-                'Database\Table\GroupInfo' => $this->_groupInfo,
-            )
-        );
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            ['Db', static::$serviceManager->get('Db')],
+            [ClientConfig::class, static::$serviceManager->get(ClientConfig::class)],
+            [GroupMemberships::class, static::$serviceManager->get(GroupMemberships::class)],
+            [ClientsAndGroups::class, $clientsAndGroups],
+            [GroupInfo::class, $this->_groupInfo],
+        ]);
+
+        $model = new GroupManager($serviceManager);
         try {
             $model->deleteGroup($group);
             $this->fail('Expected exception was not thrown');
         } catch (\RuntimeException $e) {
             $this->assertEquals('database error', $e->getMessage());
-            $dataSet = $this->_loadDataSet();
+            $dataSet = $this->loadDataSet();
             $connection = $this->getConnection();
             $this->assertTablesEqual(
                 $dataSet->getTable('hardware'),
                 $connection->createQueryTable(
-                    'hardware', 'SELECT id, deviceid, name, description, lastdate FROM hardware'
+                    'hardware',
+                    'SELECT id, deviceid, name, description, lastdate FROM hardware'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups'),
                 $connection->createQueryTable(
-                    'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
+                    'groups',
+                    'SELECT hardware_id, request, create_time, revalidate_from FROM groups'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('groups_cache'),
                 $connection->createQueryTable(
-                    'groups_cache', 'SELECT group_id, hardware_id, static FROM groups_cache'
+                    'groups_cache',
+                    'SELECT group_id, hardware_id, static FROM groups_cache'
                 )
             );
             $this->assertTablesEqual(
                 $dataSet->getTable('devices'),
                 $connection->createQueryTable(
-                    'devices', 'SELECT hardware_id, name, ivalue FROM devices'
+                    'devices',
+                    'SELECT hardware_id, name, ivalue FROM devices'
                 )
             );
         }
@@ -336,14 +439,11 @@ class GroupManagerTest extends AbstractGroupTest
 
     public function testUpdateCache()
     {
-        $group = $this->getMock('Model\Group\Group');
+        $group = $this->createMock('Model\Group\Group');
         $group->expects($this->once())->method('update')->with(true);
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->disableOriginalConstructor()
-                      ->setMethods(array('getGroups'))
-                      ->getMock();
-        $model->expects($this->once())->method('getGroups')->with('Expired')->willReturn(array($group));
+        $model = $this->createPartialMock(GroupManager::class, ['getGroups']);
+        $model->method('getGroups')->with('Expired')->willReturn([$group]);
         $model->updateCache();
     }
 }

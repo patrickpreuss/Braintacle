@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for FixEncodingErrors filter
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,11 +25,13 @@ namespace Library\Test\Filter;
 /**
  * Tests for FixEncodingErrors filter
  */
-class FixEncodingErrorsTest extends \PHPUnit_Framework_TestCase
+class FixEncodingErrorsTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * Test filter() method
-     */
+    public function testInterface()
+    {
+        $this->assertInstanceOf('Laminas\Filter\AbstractFilter', new \Library\Filter\FixEncodingErrors());
+    }
+
     public function testFilter()
     {
         // 2 common example characters
@@ -42,7 +45,7 @@ class FixEncodingErrorsTest extends \PHPUnit_Framework_TestCase
         $expected = $enDashGood . $tmGood . $enDashGood;
         $this->assertEquals(
             $expected,
-            \Zend\Filter\StaticFilter::execute($input, 'Library\FixEncodingErrors')
+            \Laminas\Filter\StaticFilter::execute($input, 'Library\FixEncodingErrors')
         );
     }
 }

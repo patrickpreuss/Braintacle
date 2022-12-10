@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Filter to keep only whitelisted properties
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,7 +25,7 @@ namespace Library\Hydrator\Filter;
 /**
  * Filter to keep only whitelisted properties
  */
-class Whitelist implements \Zend\Stdlib\Hydrator\Filter\FilterInterface
+class Whitelist implements \Laminas\Hydrator\Filter\FilterInterface
 {
     /**
      * Whitelisted properties
@@ -43,7 +44,7 @@ class Whitelist implements \Zend\Stdlib\Hydrator\Filter\FilterInterface
     }
 
     /** {@inheritdoc} */
-    public function filter($property)
+    public function filter(string $property, ?object $instance = null): bool
     {
         return in_array($property, $this->_whitelist);
     }

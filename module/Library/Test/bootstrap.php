@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Bootstrap for unit tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,8 +20,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+namespace Library;
+
 error_reporting(-1);
 date_default_timezone_set('Europe/Berlin');
+\Locale::setDefault('de');
 
 /**
  * A minimal stream wrapper to simulate I/O errors
@@ -30,6 +34,7 @@ date_default_timezone_set('Europe/Berlin');
  * error from a normal EOF). Every other method will cause the calling stream
  * function to fail, allowing testing the error handling in the application.
  */
+// @codingStandardsIgnoreStart
 class StreamWrapperFail
 {
     public function stream_open($path, $mode, $options, &$openedPath)
@@ -42,20 +47,17 @@ class StreamWrapperFail
         return false;
     }
 }
-stream_wrapper_register('fail', 'StreamWrapperFail');
+// @codingStandardsIgnoreEnd
+stream_wrapper_register('fail', 'Library\StreamWrapperFail');
 
-require_once(__DIR__ . '/../../Library/Application.php');
-\Library\Application::init('Library', false);
-
-\Locale::setDefault('de_DE'); // Force environment-independent locale
-
-// Get absolute path to vfsStream library
-\Zend\Loader\AutoloaderFactory::factory(
+$serviceManager = \Library\Application::init('Library')->getServiceManager();
+$serviceManager->setService(
+    'Library\UserConfig',
     array(
-        '\Zend\Loader\StandardAutoloader' => array(
-            'namespaces' => array(
-                'org\bovigo\vfs' => stream_resolve_include_path('org/bovigo/vfs'),
-            ),
-        )
+        'debug' => array(
+            'report missing translations' => true,
+        ),
     )
 );
+\Library\Test\View\Helper\AbstractTest::$serviceManager = $serviceManager;
+unset($serviceManager);

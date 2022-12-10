@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the NetworkInterfaces table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,20 +22,28 @@
 
 namespace Database\Test\Table;
 
+use Laminas\Db\ResultSet\HydratingResultSet;
+use Laminas\Hydrator\ArraySerializableHydrator;
+use Library\Hydrator\Strategy\MacAddress;
+use Model\Client\Item\NetworkInterface;
+
 class NetworkInterfacesTest extends AbstractTest
 {
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
-    public function testHydrator()
+    public function testHydratorClass()
     {
         $hydrator = static::$_table->getHydrator();
-        $this->assertInstanceOf('Zend\Stdlib\Hydrator\ArraySerializable', $hydrator);
+        $this->assertInstanceOf(ArraySerializableHydrator::class, $hydrator);
+    }
 
+    public function testHydratorNamingStrategy()
+    {
+        $hydrator = static::$_table->getHydrator();
         $map = $hydrator->getNamingStrategy();
-        $this->assertInstanceOf('Database\Hydrator\NamingStrategy\MapNamingStrategy', $map);
 
         $this->assertEquals('Description', $map->hydrate('description'));
         $this->assertEquals('Rate', $map->hydrate('speed'));
@@ -60,19 +69,34 @@ class NetworkInterfacesTest extends AbstractTest
         $this->assertEquals('status', $map->extract('Status'));
         $this->assertEquals('type', $map->extract('Type'));
         $this->assertEquals('typemib', $map->extract('TypeMib'));
+    }
 
-        $this->assertInstanceOf('Library\Hydrator\Strategy\MacAddress', $hydrator->getStrategy('MacAddress'));
-        $this->assertInstanceOf('Library\Hydrator\Strategy\MacAddress', $hydrator->getStrategy('macaddr'));
+    public function testHydratorMacAddressStrategy()
+    {
+        $hydrator = static::$_table->getHydrator();
+        $this->assertInstanceOf(MacAddress::class, $hydrator->getStrategy('MacAddress'));
+        $this->assertInstanceOf(MacAddress::class, $hydrator->getStrategy('macaddr'));
+    }
 
+    public function testHydratorExtraction()
+    {
+        $hydrator = static::$_table->getHydrator();
+        $object = new NetworkInterface();
+        $object->description = '_description';
+        $object->isBlacklisted = true;
         $this->assertEquals(
-            array('description' => '_description'),
-            $hydrator->extract(
-                new \ArrayObject(array('Description' => '_description', 'IsBlacklisted' => true))
-            )
+            ['description' => '_description'],
+            $hydrator->extract($object)
         );
+    }
 
+    public function testResultSetHydrator()
+    {
+        $hydrator = static::$_table->getHydrator();
+
+        /** @var HydratingResultSet */
         $resultSet = static::$_table->getResultSetPrototype();
-        $this->assertInstanceOf('Zend\Db\ResultSet\HydratingResultSet', $resultSet);
+        $this->assertInstanceOf(HydratingResultSet::class, $resultSet);
         $this->assertEquals($hydrator, $resultSet->getHydrator());
     }
 }

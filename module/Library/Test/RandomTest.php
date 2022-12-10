@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Library\Random
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,16 +22,27 @@
 
 namespace Library\Test;
 
-class RandomTest extends \PHPUnit_Framework_TestCase
+class RandomTest extends \PHPUnit\Framework\TestCase
 {
-    public function testGetInteger()
+    public function getIntegerProvider()
     {
-        $random = new \Library\Random;
+        return array(
+            array(true),
+            array(false),
+        );
+    }
+
+    /**
+     * @dataProvider getIntegerProvider
+     */
+    public function testGetInteger($strong)
+    {
+        $random = new \Library\Random();
         for ($i = 0; $i < 20; $i++) {
-            $value = $random->getInteger(0, 5);
+            $value = $random->getInteger(0, 5, $strong);
             $this->assertGreaterThanOrEqual(0, $value);
             $this->assertLessThanOrEqual(5, $value);
         }
-        $this->assertInternalType('integer', $value);
+        $this->assertIsInt($value);
     }
 }

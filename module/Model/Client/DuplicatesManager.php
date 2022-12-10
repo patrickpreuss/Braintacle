@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Class for managing duplicate clients
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -22,6 +23,8 @@
 namespace Model\Client;
 
 use Database\Table;
+use Model\SoftwareManager;
+use RuntimeException;
 
 /**
  * Class for managing duplicate clients
@@ -50,6 +53,31 @@ use Database\Table;
  */
 class DuplicatesManager
 {
+    /**
+     * Option for merge(): Merge client config
+     */
+    const MERGE_CONFIG = 'mergeConfig';
+
+    /**
+     * Option for merge(): Preserve custom fields from oldest client
+     */
+    const MERGE_CUSTOM_FIELDS = 'mergeCustomFields';
+
+    /**
+     * Option for merge(): Preserve manual group assignments from old clients
+     */
+    const MERGE_GROUPS = 'mergeGroups';
+
+    /**
+     * Option for merge(): Preserve package assignments from old clients missing on new client
+     */
+    const MERGE_PACKAGES = 'mergePackages';
+
+    /**
+     * Option for merge(): Preserve manually entered Windows product key
+     */
+    const MERGE_PRODUCT_KEY = 'mergeProductKey';
+
     /**
      * Clients prototype
      * @var \Database\Table\Clients
@@ -93,6 +121,11 @@ class DuplicatesManager
     protected $_clientManager;
 
     /**
+     * Software manager
+     */
+    private SoftwareManager $_softwareManager;
+
+    /**
      * Constructor
      *
      * @param \Database\Table\Clients $clients
@@ -102,6 +135,7 @@ class DuplicatesManager
      * @param \Database\Table\DuplicateMacAddresses $duplicateMacAddresses
      * @param \Database\Table\ClientConfig $clientConfig
      * @param \Model\Client\ClientManager $clientManager
+     * @param \Model\SoftwareManager $softwareManager
      */
     public function __construct(
         Table\Clients $clients,
@@ -110,9 +144,9 @@ class DuplicatesManager
         Table\DuplicateSerials $duplicateSerials,
         Table\DuplicateMacAddresses $duplicateMacAddresses,
         Table\ClientConfig $clientConfig,
-        \Model\Client\ClientManager $clientManager
-    )
-    {
+        \Model\Client\ClientManager $clientManager,
+        \Model\SoftwareManager $softwareManager
+    ) {
         $this->_clients = $clients;
         $this->_networkInterfaces = $networkInterfaces;
         $this->_duplicateAssetTags = $duplicateAssetTags;
@@ -120,35 +154,40 @@ class DuplicatesManager
         $this->_duplicateMacaddresses = $duplicateMacAddresses;
         $this->_clientConfig = $clientConfig;
         $this->_clientManager = $clientManager;
+        $this->_softwareManager = $softwareManager;
     }
 
     /**
      * Get query for duplicate values of given griteria
      *
      * @param string $criteria One of Name|MacAddress|Serial|AssetTag
-     * @return \Zend\Db\Sql\Select
+     * @return \Laminas\Db\Sql\Select
      * @throws \InvalidArgumentException if $criteria is invalid
      */
-    protected function _getDuplicateValues($criteria)
+    protected function getDuplicateValues($criteria)
     {
         switch ($criteria) {
             case 'Name':
                 $table = $this->_clients;
                 $column = 'name';
+                $count = 'name';
                 break;
             case 'AssetTag':
                 $table = $this->_clients;
                 $column = 'assettag';
+                $count = 'assettag';
                 $where = 'assettag NOT IN(SELECT assettag FROM braintacle_blacklist_assettags)';
                 break;
             case 'Serial':
                 $table = $this->_clients;
                 $column = 'ssn';
+                $count = 'ssn';
                 $where = 'ssn NOT IN(SELECT serial FROM blacklist_serials)';
                 break;
             case 'MacAddress':
                 $table = $this->_networkInterfaces;
                 $column = 'macaddr';
+                $count = 'DISTINCT hardware_id'; // Count MAC addresses only once per client
                 $where = 'macaddr NOT IN(SELECT macaddress FROM blacklist_macaddresses)';
                 break;
             default:
@@ -157,7 +196,7 @@ class DuplicatesManager
         $select = $table->getSql()->select();
         $select->columns(array($column))
                ->group($column)
-               ->having("COUNT($column) > 1");
+               ->having("COUNT($count) > 1");
         if (isset($where)) {
             $select->where($where);
         }
@@ -172,22 +211,24 @@ class DuplicatesManager
      */
     public function count($criteria)
     {
-        $subQuery = $this->_getDuplicateValues($criteria);
+        $subQuery = $this->getDuplicateValues($criteria);
         $column = $subQuery->getRawState($subQuery::COLUMNS)[0];
         if ($criteria == 'MacAddress') {
             $table = $this->_networkInterfaces;
+            $count = 'DISTINCT hardware_id'; // Count clients only once
         } else {
             $table = $this->_clients;
+            $count = $column;
         }
 
         $sql = $table->getSql();
         $select = $sql->select();
         $select->columns(
             array(
-                'num_clients' => new \Zend\Db\Sql\Literal("COUNT($column)")
+                'num_clients' => new \Laminas\Db\Sql\Literal("COUNT($count)")
             )
         );
-        $select->where(array(new \Zend\Db\Sql\Predicate\In($column, $subQuery)));
+        $select->where(array(new \Laminas\Db\Sql\Predicate\In($column, $subQuery)));
         $row = $sql->prepareStatementForSqlObject($select)->execute()->current();
         return $row['num_clients'];
     }
@@ -198,11 +239,11 @@ class DuplicatesManager
      * @param string $criteria One of Name|MacAddress|Serial|AssetTag
      * @param string $order Sorting order (default: 'Id')
      * @param string $direction One of asc|desc (default: 'asc')
-     * @return \Zend\Db\ResultSet\AbstractResultSet \Model\Client\Client iterator
+     * @return \Laminas\Db\ResultSet\AbstractResultSet \Model\Client\Client iterator
      */
-    public function find($criteria, $order='Id', $direction='asc')
+    public function find($criteria, $order = 'Id', $direction = 'asc')
     {
-        $subQuery = $this->_getDuplicateValues($criteria);
+        $subQuery = $this->getDuplicateValues($criteria);
         $column = $subQuery->getRawState($subQuery::COLUMNS)[0];
 
         $select = $this->_clientManager->getClients(
@@ -217,13 +258,14 @@ class DuplicatesManager
             false,
             false
         );
+        $select->quantifier(\Laminas\Db\Sql\Select::QUANTIFIER_DISTINCT);
         $select->join(
             'networks',
             'networks.hardware_id = clients.id',
             array('networkinterface_macaddr' => 'macaddr'),
             $select::JOIN_LEFT
         )
-        ->where(array(new \Zend\Db\Sql\Predicate\In($column, $subQuery)));
+        ->where(array(new \Laminas\Db\Sql\Predicate\In($column, $subQuery)));
         if ($order != 'Name') {
             // Secondary ordering by name
             $select->order('name');
@@ -245,74 +287,55 @@ class DuplicatesManager
      * deleted. Some information from the older entries can be preserved on the
      * remaining client.
      *
-     * @param integer[] $clients IDs of clients to merge
-     * @param bool $mergeCustomFields Preserve custom fields from oldest client
-     * @param bool $mergeGroups Preserve manual group assignments from old clients
-     * @param bool $mergePackages Preserve package assignments from old clients missing on new client
+     * @param integer[] $clientIds IDs of clients to merge
+     * @param array $options Attributes to merge, see MERGE_* constants
      * @throws \RuntimeException if an affected client cannot be locked
      */
-    public function merge(array $clients, $mergeCustomFields, $mergeGroups, $mergePackages)
+    public function merge(array $clientIds, array $options)
     {
         // Remove duplicate IDs
-        $clients = array_unique($clients);
-        if (count($clients) < 2) {
+        $clientIds = array_unique($clientIds);
+        if (count($clientIds) < 2) {
             return; // Nothing to do
         }
 
-        $connection = $this->_clients->getAdapter()->getDriver()->getConnection();
+        $connection = $this->_clients->getConnection();
         $connection->beginTransaction();
         try {
             // Lock all given clients and create a list sorted by LastContactDate.
-            foreach ($clients as $id) {
+            $clients = [];
+            foreach ($clientIds as $id) {
                 $client = $this->_clientManager->getClient($id);
                 if (!$client->lock()) {
                     throw new \RuntimeException("Cannot lock client $id");
                 }
                 $timestamp = $client['LastContactDate']->getTimestamp();
-                $list[$timestamp] = $client;
+                if (isset($clients[$timestamp])) {
+                    throw new RuntimeException('Cannot merge because clients have identical lastContactDate');
+                }
+                $clients[$timestamp] = $client;
             }
-            ksort($list);
+            ksort($clients);
             // Now that the list is sorted, renumber the indices
-            $clients = array_values($list);
+            $clients = array_values($clients);
 
             // Newest client will be the only one not to be deleted, remove it from the list
             $newest = array_pop($clients);
 
-            if ($mergeCustomFields) {
-                // Overwrite custom fields with values from oldest client
-                $newest->setCustomFields($clients[0]['CustomFields']);
+            if (in_array(self::MERGE_CONFIG, $options)) {
+                $this->mergeConfig($newest, $clients);
             }
-
-            if ($mergeGroups) {
-                // Build list with all manual group assignments from old clients.
-                // If more than 1 old client is to be merged and the clients
-                // have different assignments for the same group, the result is
-                // undefined.
-                $groupList = array();
-                foreach ($clients as $client) {
-                    $groupList += $client->getGroupMemberships(\Model\Client\Client::MEMBERSHIP_MANUAL);
-                }
-                $newest->setGroupMemberships($groupList);
+            if (in_array(self::MERGE_CUSTOM_FIELDS, $options)) {
+                $this->mergeCustomFields($newest, $clients);
             }
-
-            if ($mergePackages) {
-                // Update the client IDs directly. Assignments from all older
-                // clients are merged. Exclude packages that are already assigned.
-                $id = $newest['Id'];
-                $notIn = $this->_clientConfig->getSql()->select();
-                $notIn->columns(array('ivalue'))
-                      ->where(array('hardware_id' => $id, 'name' => 'DOWNLOAD'));
-                foreach ($clients as $client) {
-                    $this->_clientConfig->update(
-                        array('hardware_id' => $id),
-                        array(
-                            'hardware_id' => $client['Id'],
-                            new \Zend\Db\Sql\Predicate\Operator('name', '!=', 'DOWNLOAD_SWITCH'),
-                            new \Zend\Db\Sql\Predicate\Like('name', 'DOWNLOAD%'),
-                            new \Zend\Db\Sql\Predicate\NotIn('ivalue', $notIn),
-                        )
-                    );
-                }
+            if (in_array(self::MERGE_GROUPS, $options)) {
+                $this->mergeGroups($newest, $clients);
+            }
+            if (in_array(self::MERGE_PACKAGES, $options)) {
+                $this->mergePackages($newest, $clients);
+            }
+            if (in_array(self::MERGE_PRODUCT_KEY, $options)) {
+                $this->mergeProductKey($newest, $clients);
             }
 
             // Delete all older clients
@@ -321,11 +344,122 @@ class DuplicatesManager
             }
             // Unlock remaining client
             $newest->unlock();
+            $connection->commit();
         } catch (\Exception $exception) {
             $connection->rollback();
             throw ($exception);
         }
-        $connection->commit();
+    }
+
+    /**
+     * Overwrite custom fields on newest client with values from oldest client
+     *
+     * @param \Model\Client\Client $newestClient
+     * @param \Model\Client\Client[] $olderClients sorted by LastContactDate (ascending)
+     */
+    public function mergeCustomFields($newestClient, $olderClients)
+    {
+        $newestClient->setCustomFields($olderClients[0]['CustomFields']);
+    }
+
+    /**
+     * Merge manual group memberships from older clients into newest client
+     *
+     * If clients have different membership types for the same group, the
+     * resulting membership type is undefined.
+     *
+     * @param \Model\Client\Client $newestClient
+     * @param \Model\Client\Client[] $olderClients sorted by LastContactDate (ascending)
+     */
+    public function mergeGroups($newestClient, $olderClients)
+    {
+        $groupList = [];
+        foreach ($olderClients as $client) {
+            $groupList += $client->getGroupMemberships(\Model\Client\Client::MEMBERSHIP_MANUAL);
+        }
+        $newestClient->setGroupMemberships($groupList);
+    }
+
+    /**
+     * Add missing package assignments from older clients on the newest client
+     *
+     * @param \Model\Client\Client $newestClient
+     * @param \Model\Client\Client[] $olderClients sorted by LastContactDate (ascending)
+     */
+    public function mergePackages($newestClient, $olderClients)
+    {
+        $id = $newestClient['Id'];
+
+        // Exclude packages that are already assigned.
+        $notIn = $this->_clientConfig->getSql()->select();
+        $notIn->columns(['ivalue'])->where(['hardware_id' => $id, 'name' => 'DOWNLOAD']);
+
+        foreach ($olderClients as $client) {
+            $where = [
+                'hardware_id' => $client['Id'],
+                new \Laminas\Db\Sql\Predicate\Operator('name', '!=', 'DOWNLOAD_SWITCH'),
+                new \Laminas\Db\Sql\Predicate\Like('name', 'DOWNLOAD%'),
+            ];
+            // Construct list of package IDs because MySQL does not support subquery here
+            $exclude = array_column($this->_clientConfig->selectWith($notIn)->toArray(), 'ivalue');
+            // Avoid empty list
+            if ($exclude) {
+                $where[] = new \Laminas\Db\Sql\Predicate\NotIn('ivalue', $exclude);
+            }
+            // Update the client IDs directly.
+            $this->_clientConfig->update(array('hardware_id' => $id), $where);
+        }
+    }
+
+    /**
+     * Set newest client's Windows manual product key to the newest key of all given clients
+     *
+     * @param \Model\Client\Client $newestClient
+     * @param \Model\Client\Client[] $olderClients sorted by LastContactDate (ascending)
+     */
+    public function mergeProductKey($newestClient, $olderClients)
+    {
+        if (!$newestClient['Windows']) {
+            return;
+        }
+        if ($newestClient['Windows']['ManualProductKey']) {
+            return;
+        }
+        // Iterate over all clients, newest first, and pick first key found.
+        foreach (array_reverse($olderClients) as $client) {
+            $windows = $client['Windows'];
+            if ($windows) {
+                if ($windows['ManualProductKey']) {
+                    $this->_softwareManager->setProductKey($newestClient, $windows['ManualProductKey']);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Merge config on newest client with values from older clients
+     *
+     * If a config option is not set on the newest client, set it to a
+     * value configured on an older client (if any). If multiple older clients
+     * have a value configured, the value from the most recent client is used.
+     *
+     * @param \Model\Client\Client $newestClient
+     * @param \Model\Client\Client[] $olderClients sorted by LastContactDate (ascending)
+     */
+    public function mergeConfig($newestClient, $olderClients)
+    {
+        $options = [];
+        foreach (array_reverse($olderClients) as $client) {
+            // Add options that are not present yet
+            $options += $client->getExplicitConfig();
+        }
+        // Remove options that are present on the newest client
+        $options = array_diff_key($options, $newestClient->getExplicitConfig());
+
+        foreach ($options as $option => $value) {
+            $newestClient->setConfig($option, $value);
+        }
     }
 
     /**

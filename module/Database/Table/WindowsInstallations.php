@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "windows_installations" view
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "windows_installations" view
@@ -30,9 +31,9 @@ class WindowsInstallations extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
-        $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $this->_hydrator->setNamingStrategy(
             new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
                 array(
@@ -43,12 +44,14 @@ class WindowsInstallations extends \Database\AbstractTable
                     'product_key' => 'ProductKey',
                     'product_id' => 'ProductId',
                     'manual_product_key' => 'ManualProductKey',
+                    'cpu_architecture' => 'CpuArchitecture',
                 )
             )
         );
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
-            $this->_hydrator, $serviceLocator->get('Model\Client\WindowsInstallation')
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
+            $this->_hydrator,
+            $serviceLocator->get('Model\Client\WindowsInstallation')
         );
 
         parent::__construct($serviceLocator);
@@ -58,7 +61,7 @@ class WindowsInstallations extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function setSchema()
+    public function updateSchema($prune = false)
     {
         // Reimplementation to provide a view
         $logger = $this->_serviceLocator->get('Library\Logger');
@@ -83,8 +86,8 @@ class WindowsInstallations extends \Database\AbstractTable
                 'braintacle_windows',
                 'hardware_id = id',
                 array('manual_product_key'),
-                \Zend\Db\Sql\Select::JOIN_LEFT
-            )->where(new \Zend\Db\Sql\Predicate\IsNotNull('winprodid'));
+                \Laminas\Db\Sql\Select::JOIN_LEFT
+            )->where(new \Laminas\Db\Sql\Predicate\IsNotNull('winprodid'));
 
             $database->createView('windows_installations', $sql->buildSqlString($select));
             $logger->info('done.');

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Application class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,8 +22,7 @@
 
 namespace Library\Test;
 
-use \Library\Application;
-use \org\bovigo\vfs\vfsStream;
+use Library\Application;
 
 /**
  * Tests for the Application class
@@ -31,107 +31,29 @@ use \org\bovigo\vfs\vfsStream;
  * are invoked as part of the bootstrap process which would most likely fail if
  * these methods didn't work correctly.
  */
-class ApplicationTest extends \PHPUnit_Framework_TestCase
+class ApplicationTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * Tests for environment detection methods
-     * 
-     * The tests cover getEnvironment(), isProduction(), isDevelopment() and
-     * isTest() with all relevant values for the APPLICATION_ENV environment
-     * variable.
-     */
-    public function testEnvironment()
+    public function testGetApplicationConfig()
     {
-        // Assume that the tests have been invoked with APPLICATION_ENV set to
-        // "test". Otherwise the tests might be incomplete.
-        $this->assertEquals('test', getenv('APPLICATION_ENV'));
-        $this->assertEquals('test', Application::getEnvironment());
-        $this->assertFalse(Application::isProduction());
-        $this->assertTrue(Application::isDevelopment());
-        $this->assertTrue(Application::isTest());
-
-        // Unset APPLICATION_ENV, equivalent to "production"
-        putenv('APPLICATION_ENV');
-        $this->assertEquals('production', Application::getEnvironment());
-        $this->assertTrue(Application::isProduction());
-        $this->assertFalse(Application::isDevelopment());
-        $this->assertFalse(Application::isTest());
-
-        // Test "development" environment
-        putenv('APPLICATION_ENV=development');
-        $this->assertEquals('development', Application::getEnvironment());
-        $this->assertFalse(Application::isProduction());
-        $this->assertTrue(Application::isDevelopment());
-        $this->assertFalse(Application::isTest());
-
-        // Test invalid environment. Ensure that the variable is reset to its
-        // default in either case.
-        putenv('APPLICATION_ENV=invalid');
-        try {
-            Application::getEnvironment();
-        } catch(\DomainException $expected) {
-            $invalidEnvironmmentDetected = true;
-        }
-        // Reset to default.
-        putenv('APPLICATION_ENV=test');
-        if (!isset($invalidEnvironmmentDetected)) {
-            $this->fail('Invalid environment was undetected.');
-        }
-    }
-
-    public function testGetTranslationConfigFullLocale()
-    {
-        $locale = \Locale::getDefault();
-        \Locale::setDefault('de_DE');
-        $basePath = vfsStream::setup('root');
-        $filename = vfsStream::newFile('de_DE.po')->at($basePath)->url();
         $this->assertEquals(
             array(
-                'translator' => array(
-                    'translation_files' => array(
-                        array(
-                            'type' => 'Po',
-                            'filename' => $filename,
-                        ),
-                    ),
+                'modules' => array(
+                    'Laminas\Filter',
+                    'Laminas\Form',
+                    'Laminas\I18n',
+                    'Laminas\Log',
+                    'Laminas\Mvc\I18n',
+                    'Laminas\Mvc\Plugin\FlashMessenger',
+                    'Laminas\Navigation',
+                    'Laminas\Router',
+                    'Laminas\Validator',
+                    'moduleName',
+                ),
+                'module_listener_options' => array(
+                    'module_paths' => array(realpath(__DIR__ . '/../..')),
                 ),
             ),
-            Application::getTranslationConfig($basePath->url())
+            Application::getApplicationConfig('moduleName')
         );
-        \Locale::setDefault($locale);
-    }
-
-    public function testGetTranslationConfigBaseLanguage()
-    {
-        $locale = \Locale::getDefault();
-        \Locale::setDefault('de_DE');
-        $basePath = vfsStream::setup('root');
-        $filename = vfsStream::newFile('de.po')->at($basePath)->url();
-        $this->assertEquals(
-            array(
-                'translator' => array(
-                    'translation_files' => array(
-                        array(
-                            'type' => 'Po',
-                            'filename' => $filename,
-                        ),
-                    ),
-                ),
-            ),
-            Application::getTranslationConfig($basePath->url())
-        );
-        \Locale::setDefault($locale);
-    }
-
-    public function testGetTranslationConfigNoFile()
-    {
-        $locale = \Locale::getDefault();
-        \Locale::setDefault('de_DE');
-        $basePath = vfsStream::setup('root');
-        $this->assertEquals(
-            array(),
-            Application::getTranslationConfig($basePath->url())
-        );
-        \Locale::setDefault($locale);
     }
 }

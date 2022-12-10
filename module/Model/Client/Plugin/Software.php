@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Software item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,38 +22,36 @@
 
 namespace Model\Client\Plugin;
 
-use Zend\Db\Sql\Predicate;
+use Laminas\Db\Sql\Predicate;
 
 /**
  * Software item plugin
  *
- * Provides "is_windows" field for hydrator and "Software.NotIgnored" filter to
- * list only software which has not been explicitly marked as ignored. The
- * filter only has to be present; its argument is not evaluated. The filter also
- * excludes entries where name is NULL (these are barely interesting, but cannot
- * be blacklisted explicitly).
+ * Provides "Software.NotIgnored" filter to list only software which has not
+ * been explicitly marked as ignored. The filter only has to be present; its
+ * argument is not evaluated.
  */
-class Software extends AddIsWindows
+class Software extends AddOsColumns
 {
     /** {@inheritdoc} */
     public function columns()
     {
         // Hydrator does not provide the names
-        $this->_select->columns(
-            array(
-                'name',
-                'version',
-                'comments',
-                'publisher',
-                'folder',
-                'source',
-                'guid',
-                'language',
-                'installdate',
-                'bitswidth',
-                'filesize',
-            )
-        );
+        $this->_select->columns([
+            'name',
+            'version',
+            'comment',
+            'publisher',
+            'install_location',
+            'is_hotfix',
+            'guid',
+            'language',
+            'installation_date',
+            'architecture',
+            'size',
+            'is_android' => $this->getIsAndroidExpression(),
+            'display',
+        ]);
     }
 
     /** {@inheritdoc} */
@@ -61,13 +60,6 @@ class Software extends AddIsWindows
         parent::where($filters);
 
         if (is_array($filters) and array_key_exists('Software.NotIgnored', $filters)) {
-            $this->_select->join(
-                'software_definitions',
-                'software_definitions.name = softwares.name',
-                array(),
-                \Zend\Db\Sql\Select::JOIN_LEFT
-            );
-            $this->_select->where(new Predicate\IsNotNull('softwares.name'));
             $this->_select->where(
                 new Predicate\PredicateSet(
                     array(

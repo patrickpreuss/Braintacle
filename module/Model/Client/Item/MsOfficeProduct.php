@@ -1,8 +1,9 @@
 <?php
+
 /**
  * MS Office Product
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -33,7 +34,7 @@ namespace Model\Client\Item;
  * @property string $Guid Product GUID
  * @property integer $Type TYPE_INSTALLED_PRODUCT or TYPE_UNUSED_LICENSE
  */
-class MsOfficeProduct extends \ArrayObject
+class MsOfficeProduct extends \Model\AbstractModel
 {
     /**
      * "Type" property for an unused license (leftover from an uninstalled product)

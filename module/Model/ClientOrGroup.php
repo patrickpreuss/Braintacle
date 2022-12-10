@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for clients and groups
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,9 @@
 
 namespace Model;
 
+use Laminas\Db\Sql\Predicate\Operator;
+use Nada\Column\AbstractColumn as Column;
+
 /**
  * Base class for clients and groups
  *
@@ -31,10 +35,8 @@ namespace Model;
  * the implementation of this functionality, this class implements the common
  * functionality for both objects.
  */
-abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManager\ServiceLocatorAwareInterface
+abstract class ClientOrGroup extends AbstractModel
 {
-    use \Zend\ServiceManager\ServiceLocatorAwareTrait;
-
     /**
      * @internal
      * Scan value in 'devices' table
@@ -46,6 +48,12 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
      * Scan value in 'devices' table
      */
     const SCAN_EXPLICIT = 2;
+
+    /**
+     * Service Locator
+     * @var \Laminas\ServiceManager\ServiceLocatorInterface
+     */
+    protected $_serviceLocator;
 
     /**
      * Cache for getConfig() results
@@ -66,14 +74,53 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
     protected $_lockNestCount = 0;
 
     /**
+     * All config options
+     * @var string[]
+     */
+    private $_options = [
+        'contactInterval',
+        'inventoryInterval',
+        'packageDeployment',
+        'downloadPeriodDelay',
+        'downloadCycleDelay',
+        'downloadFragmentDelay',
+        'downloadMaxPriority',
+        'downloadTimeout',
+        'allowScan',
+        'scanSnmp',
+    ];
+
+    /**
+     * Options which can only be disabled
+     * @var string[]
+     */
+    private $_optionsDisableOnly = [
+        'packageDeployment',
+        'allowScan',
+        'scanSnmp',
+    ];
+
+    /**
      * Destructor
      */
-    function __destruct()
+    public function __destruct()
     {
         if ($this->_lockNestCount > 1) {
             $this->_lockNestCount = 1;
         }
         $this->unlock();
+    }
+
+    /**
+     * Set service locator
+     *
+     * This should usually be called by a factory.
+     *
+     * @param \Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator
+     */
+    public function setServiceLocator(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    {
+        $this->_serviceLocator = $serviceLocator;
     }
 
     /**
@@ -105,16 +152,16 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
         // reference across all operations (including Braintacle server).
         // The cast is necessary on some DBMS to get consistent timezone and
         // precision.
-        $currentTimestamp = new \Zend\Db\Sql\Literal(
+        $currentTimestamp = new \Laminas\Db\Sql\Literal(
             sprintf(
                 'CAST(CURRENT_TIMESTAMP AS %s)',
-                $this->serviceLocator->get('Database\Nada')->getNativeDatatype(\Nada::DATATYPE_TIMESTAMP, null, true)
+                $this->_serviceLocator->get('Database\Nada')->getNativeDatatype(Column::TYPE_TIMESTAMP, null, true)
             )
         );
         $current = new \DateTime(
-            $this->serviceLocator->get('Db')->query(
+            $this->_serviceLocator->get('Db')->query(
                 sprintf('SELECT %s AS current', $currentTimestamp->getLiteral()),
-                \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
+                \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
             )->current()['current'],
             $utc
         );
@@ -122,10 +169,10 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
         $expireInterval = new \DateInterval(
             sprintf(
                 'PT%dS',
-                $this->serviceLocator->get('Model\Config')->lockValidity
+                $this->_serviceLocator->get('Model\Config')->lockValidity
             )
         );
-        $locks = $this->serviceLocator->get('Database\Table\Locks');
+        $locks = $this->_serviceLocator->get('Database\Table\Locks');
 
         // Check if a lock already exists
         $select = $locks->getSql()->select();
@@ -194,16 +241,16 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
 
         // Query time from database for consistent reference across all operations
         $current = new \DateTime(
-            $this->serviceLocator->get('Db')->query(
+            $this->_serviceLocator->get('Db')->query(
                 sprintf(
                     'SELECT CAST(CURRENT_TIMESTAMP AS %s) AS current',
-                    $this->serviceLocator->get('Database\Nada')->getNativeDatatype(
-                        \Nada::DATATYPE_TIMESTAMP,
+                    $this->_serviceLocator->get('Database\Nada')->getNativeDatatype(
+                        Column::TYPE_TIMESTAMP,
                         null,
                         true
                     )
                 ),
-                \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
+                \Laminas\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
             )->current()['current'],
             new \DateTimeZone('UTC')
         );
@@ -220,7 +267,7 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
             // @codeCoverageIgnoreStart
         } else {
             // @codeCoverageIgnoreEnd
-            $this->serviceLocator->get('Database\Table\Locks')->delete(array('hardware_id' => $this['Id']));
+            $this->_serviceLocator->get('Database\Table\Locks')->delete(array('hardware_id' => $this['Id']));
         }
     }
 
@@ -244,49 +291,49 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
      */
     public function getAssignablePackages()
     {
-        $packages = $this->serviceLocator->get('Database\Table\Packages');
+        $packages = $this->_serviceLocator->get('Database\Table\Packages');
         $select = $packages->getSql()->select();
         $select->columns(array('name'))
                ->join(
                    // assigned packages
                    'devices',
-                   new \Zend\Db\Sql\Predicate\PredicateSet(
+                   new \Laminas\Db\Sql\Predicate\PredicateSet(
                        array(
-                           new \Zend\Db\Sql\Predicate\Operator('ivalue', '=', new \Zend\Db\Sql\Literal('fileid')),
-                           new \Zend\Db\Sql\Predicate\Operator('devices.hardware_id', '=', $this['Id']),
+                           new Operator('ivalue', '=', 'fileid', Operator::TYPE_IDENTIFIER, Operator::TYPE_IDENTIFIER),
+                           new \Laminas\Db\Sql\Predicate\Operator('devices.hardware_id', '=', $this['Id']),
                            // "DOWNLOAD" is always present, eventual "DOWNLOAD_*" rows exist in addition to that.
                            // The equality check is suficient here.
-                           new \Zend\Db\Sql\Predicate\Operator('devices.name', '=', 'DOWNLOAD'),
+                           new \Laminas\Db\Sql\Predicate\Operator('devices.name', '=', 'DOWNLOAD'),
                        )
                    ),
                    array(),
-                   \Zend\Db\Sql\Select::JOIN_LEFT
+                   \Laminas\Db\Sql\Select::JOIN_LEFT
                )
                ->join(
                    // packages from history
                    'download_history',
-                   new \Zend\Db\Sql\Predicate\PredicateSet(
+                   new \Laminas\Db\Sql\Predicate\PredicateSet(
                        array(
-                           new \Zend\Db\Sql\Predicate\Operator('pkg_id', '=', new \Zend\Db\Sql\Literal('fileid')),
-                           new \Zend\Db\Sql\Predicate\Operator('download_history.hardware_id', '=', $this['Id']),
+                           new Operator('pkg_id', '=', 'fileid', Operator::TYPE_IDENTIFIER, Operator::TYPE_IDENTIFIER),
+                           new \Laminas\Db\Sql\Predicate\Operator('download_history.hardware_id', '=', $this['Id']),
                        )
                    ),
                    array(),
-                   \Zend\Db\Sql\Select::JOIN_LEFT
+                   \Laminas\Db\Sql\Select::JOIN_LEFT
                )
                ->where(
                    // exclude rows containing data from joined tables
                    array(
-                        new \Zend\Db\Sql\Predicate\IsNull('devices.ivalue'),
-                        new \Zend\Db\Sql\Predicate\IsNull('download_history.pkg_id'),
+                        new \Laminas\Db\Sql\Predicate\IsNull('devices.ivalue'),
+                        new \Laminas\Db\Sql\Predicate\IsNull('download_history.pkg_id'),
                    )
                )->order('download_available.name');
 
-       $result = array();
-       foreach ($packages->selectWith($select) as $package) {
-           $result[] = $package['Name'];
-       }
-       return $result;
+        $result = array();
+        foreach ($packages->selectWith($select) as $package) {
+            $result[] = $package['Name'];
+        }
+        return $result;
     }
 
     /**
@@ -299,14 +346,14 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
     public function assignPackage($name)
     {
         if (in_array($name, $this->getAssignablePackages())) {
-            $package = $this->serviceLocator->get('Model\Package\PackageManager')->getPackage($name);
-            $this->serviceLocator->get('Database\Table\ClientConfig')->insert(
+            $package = $this->_serviceLocator->get('Model\Package\PackageManager')->getPackage($name);
+            $this->_serviceLocator->get('Database\Table\ClientConfig')->insert(
                 array(
                     'hardware_id' => $this['Id'],
                     'name' => 'DOWNLOAD',
                     'ivalue' => $package['Id'],
-                    'tvalue' => \Model\Package\Assignment::NOT_NOTIFIED,
-                    'comments' => $this->serviceLocator->get('Library\Now')->format(
+                    'tvalue' => \Model\Package\Assignment::PENDING,
+                    'comments' => $this->_serviceLocator->get('Library\Now')->format(
                         \Model\Package\Assignment::DATEFORMAT
                     ),
                 )
@@ -321,12 +368,12 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
      */
     public function removePackage($name)
     {
-        $package = $this->serviceLocator->get('Model\Package\PackageManager')->getPackage($name);
-        $this->serviceLocator->get('Database\Table\ClientConfig')->delete(
+        $package = $this->_serviceLocator->get('Model\Package\PackageManager')->getPackage($name);
+        $this->_serviceLocator->get('Database\Table\ClientConfig')->delete(
             array(
                 'hardware_id' => $this['Id'],
                 'ivalue' => $package['Id'],
-                new \Zend\Db\Sql\Predicate\Like('name', 'DOWNLOAD%')
+                new \Laminas\Db\Sql\Predicate\Like('name', 'DOWNLOAD%')
             )
         );
     }
@@ -384,9 +431,9 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
                 $name = 'SNMP_SWITCH'; // differs from global database option name
                 break;
             default:
-                $name = $this->serviceLocator->get('Model\Config')->getDbIdentifier($option);
+                $name = $this->_serviceLocator->get('Model\Config')->getDbIdentifier($option);
         }
-        $clientConfig = $this->serviceLocator->get('Database\Table\ClientConfig');
+        $clientConfig = $this->_serviceLocator->get('Database\Table\ClientConfig');
         $select = $clientConfig->getSql()->select();
         $select->columns(array($column))
                ->where(
@@ -399,9 +446,9 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
         if ($row) {
             $value = $row[$column];
             if ($column == 'ivalue') {
-                $value = (integer) $value;
+                $value = (int) $value;
             }
-            $value = $this->_normalizeConfig($option, $value);
+            $value = $this->normalizeConfig($option, $value);
         } else {
             $value = null;
         }
@@ -425,16 +472,16 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
         if ($option == 'allowScan' or $option == 'scanThisNetwork') {
             $name = 'IPDISCOVER';
         } else {
-            $name = $this->serviceLocator->get('Model\Config')->getDbIdentifier($option);
+            $name = $this->_serviceLocator->get('Model\Config')->getDbIdentifier($option);
             if ($option == 'packageDeployment' or $option == 'scanSnmp') {
                 $name .= '_SWITCH';
             }
         }
 
         if ($value !== null and $option != 'scanThisNetwork') {
-            $value = (integer) $value; // Strict type required for cache
+            $value = (int) $value; // Strict type required for cache
         }
-        $value = $this->_normalizeConfig($option, $value);
+        $value = $this->normalizeConfig($option, $value);
 
         // Set affected columns
         if ($option == 'scanThisNetwork') {
@@ -452,42 +499,47 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
             'name' => $name,
         );
 
-        $clientConfig = $this->serviceLocator->get('Database\Table\ClientConfig');
+        $clientConfig = $this->_serviceLocator->get('Database\Table\ClientConfig');
         $connection = $clientConfig->getAdapter()->getDriver()->getConnection();
         $connection->beginTransaction();
-        if ($value === null) {
-            // Unset option. For scan options, also check ivalue to prevent
-            // accidental deletion of unrelated setting.
-            if ($option == 'allowScan') {
-                $condition['ivalue'] = self::SCAN_DISABLED;
-            } elseif ($option == 'scanThisNetwork') {
-                $condition['ivalue'] = self::SCAN_EXPLICIT;
-            }
-            $clientConfig->delete($condition);
-        } else {
-            $oldValue = $this->getConfig($option);
-            if ($oldValue === null) {
-                // Not set yet, insert new record
-                if ($name == 'IPDISCOVER' or $name == 'DOWNLOAD_SWITCH' or $name == 'SNMP_SWITCH') {
-                    // There may already be a record with a different ivalue.
-                    // For IPDISCOVER, this can happen because different $option
-                    // values map to it. For *_SWITCH, this can happen if the
-                    // database value is 1 (which is only possible if the record
-                    // was not written by Braintacle), which getConfig() reports
-                    // as NULL.
-                    // Since there may only be 1 record per hardware_id/name,
-                    // the old record must be deleted first.
-                    $clientConfig->delete($condition);
+        try {
+            if ($value === null) {
+                // Unset option. For scan options, also check ivalue to prevent
+                // accidental deletion of unrelated setting.
+                if ($option == 'allowScan') {
+                    $condition['ivalue'] = self::SCAN_DISABLED;
+                } elseif ($option == 'scanThisNetwork') {
+                    $condition['ivalue'] = self::SCAN_EXPLICIT;
                 }
-                $columns['hardware_id'] = $this['Id'];
-                $columns['name'] = $name;
-                $clientConfig->insert($columns);
-            } elseif ($oldValue != $value) {
-                // Already set to a different value, update record
-                $clientConfig->update($columns, $condition);
+                $clientConfig->delete($condition);
+            } else {
+                $oldValue = $this->getConfig($option);
+                if ($oldValue === null) {
+                    // Not set yet, insert new record
+                    if ($name == 'IPDISCOVER' or $name == 'DOWNLOAD_SWITCH' or $name == 'SNMP_SWITCH') {
+                        // There may already be a record with a different ivalue.
+                        // For IPDISCOVER, this can happen because different $option
+                        // values map to it. For *_SWITCH, this can happen if the
+                        // database value is 1 (which is only possible if the record
+                        // was not written by Braintacle), which getConfig() reports
+                        // as NULL.
+                        // Since there may only be 1 record per hardware_id/name,
+                        // the old record must be deleted first.
+                        $clientConfig->delete($condition);
+                    }
+                    $columns['hardware_id'] = $this['Id'];
+                    $columns['name'] = $name;
+                    $clientConfig->insert($columns);
+                } elseif ($oldValue != $value) {
+                    // Already set to a different value, update record
+                    $clientConfig->update($columns, $condition);
+                }
             }
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
         }
-        $connection->commit();
         $this->_configCache[$option] = $value;
     }
 
@@ -511,12 +563,9 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
      * @param mixed $value Raw value
      * @return mixed Normalized value
      */
-    protected function _normalizeConfig($option, $value)
+    protected function normalizeConfig($option, $value)
     {
-        if ($option == 'packageDeployment' or
-            $option == 'scanSnmp' or
-            $option == 'allowScan'
-        ) {
+        if (in_array($option, $this->_optionsDisableOnly)) {
             // These options are only evaluated if their default setting is
             // enabled, i.e. they only have an effect if they get disabled.
             // To keep things clearer in the database, the option is unset if
@@ -529,32 +578,69 @@ abstract class ClientOrGroup extends \ArrayObject implements \Zend\ServiceManage
     }
 
     /**
-     * Get all stored object-specific configuration values
+     * Get all object-specific configuration values
      *
      * The returned array has 3 elements: 'Agent', 'Download' and 'Scan'. Each
-     * of these is an array with name/value pairs of configured values.
+     * of these is an array with name/value pairs of object-specific values. If
+     * an option is not configured for this object, its value is NULL unless it
+     * can only be disabled, not enabled. In that case, the returned value is 1
+     * if it is not configured.
+     *
+     * Like with getConfig(), the returned options may not necessarily be
+     * effective.
      *
      * @return array[]
      */
     public function getAllConfig()
     {
-        return array(
-            'Agent' => array(
-                'contactInterval' => $this->getConfig('contactInterval'),
-                'inventoryInterval' => $this->getConfig('inventoryInterval'),
-            ),
-            'Download' => array(
-                'packageDeployment' => (integer) ($this->getConfig('packageDeployment') === null),
-                'downloadPeriodDelay' => $this->getConfig('downloadPeriodDelay'),
-                'downloadCycleDelay' => $this->getConfig('downloadCycleDelay'),
-                'downloadFragmentDelay' => $this->getConfig('downloadFragmentDelay'),
-                'downloadMaxPriority' => $this->getConfig('downloadMaxPriority'),
-                'downloadTimeout' => $this->getConfig('downloadTimeout'),
-            ),
-            'Scan' => array(
-                'allowScan' => (integer) ($this->getConfig('allowScan') === null),
-                'scanSnmp' => (integer) ($this->getConfig('scanSnmp') === null),
-            ),
-        );
+        $options = [];
+        foreach ($this->_options as $option) {
+            $value = $this->getConfig($option);
+            if (in_array($option, $this->_optionsDisableOnly)) {
+                $value = (int) ($value === null);
+            }
+            $options[$option] = $value;
+        }
+        return [
+            'Agent' => [
+                'contactInterval' => $options['contactInterval'],
+                'inventoryInterval' => $options['inventoryInterval'],
+            ],
+            'Download' => [
+                'packageDeployment' => $options['packageDeployment'],
+                'downloadPeriodDelay' => $options['downloadPeriodDelay'],
+                'downloadCycleDelay' => $options['downloadCycleDelay'],
+                'downloadFragmentDelay' => $options['downloadFragmentDelay'],
+                'downloadMaxPriority' => $options['downloadMaxPriority'],
+                'downloadTimeout' => $options['downloadTimeout'],
+            ],
+            'Scan' => [
+                'allowScan' => $options['allowScan'],
+                'scanSnmp' => $options['scanSnmp'],
+            ],
+        ];
+    }
+
+    /**
+     * Get all explicitly configured object-specific configuration values
+     *
+     * Returns a flat associative array with options which are explicitly
+     * configured for this object. Unconfigured options are not returned.
+     *
+     * Like with getConfig(), the returned options may not necessarily be
+     * effective.
+     *
+     * @return mixed[]
+     */
+    public function getExplicitConfig()
+    {
+        $options = [];
+        foreach ($this->_options as $option) {
+            $value = $this->getConfig($option);
+            if ($value !== null) {
+                $options[$option] = $value;
+            }
+        }
+        return $options;
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Package\PackageManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,8 +21,18 @@
  */
 
 namespace Model\Test\Package;
+
+use Database\Table\ClientConfig;
+use Database\Table\GroupInfo;
+use Database\Table\Packages;
+use DateTime;
+use Laminas\ServiceManager\ServiceManager;
+use Model\Package\Package;
+use Model\Package\PackageBuilder;
 use Model\Package\PackageManager;
-use org\bovigo\vfs\vfsStream;
+use Model\Package\Storage\Direct;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 /**
  * Tests for Model\Package\PackageManager
@@ -33,8 +44,8 @@ class PackageManagerTest extends \Model\Test\AbstractTest
 
     public function testPackageExists()
     {
-        $this->assertTrue($this->_getModel()->packageExists('package1'));
-        $this->assertFalse($this->_getModel()->packageExists('new_package'));
+        $this->assertTrue($this->getModel()->packageExists('package1'));
+        $this->assertFalse($this->getModel()->packageExists('new_package'));
     }
 
     public function testGetPackage()
@@ -58,9 +69,18 @@ class PackageManagerTest extends \Model\Test\AbstractTest
             'WarnAllowDelay' => 'WarnAllowDelay',
             'PostInstMessage' => 'PostInstMessage',
         );
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
+        $storage = $this->createMock('Model\Package\Storage\Direct');
         $storage->expects($this->once())->method('readMetadata')->with('1415958320')->willReturn($metadata);
-        $model = $this->_getModel(array('Model\Package\Storage\Direct' => $storage));
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            [Direct::class, $storage],
+            [Packages::class, static::$serviceManager->get(Packages::class)],
+        ]);
+
+        $model = new PackageManager($serviceManager);
+
         $package = $model->getPackage('package2');
         $this->assertInstanceOf('Model\Package\Package', $package);
         $this->assertEquals(
@@ -71,17 +91,28 @@ class PackageManagerTest extends \Model\Test\AbstractTest
 
     public function testGetPackageInvalidName()
     {
-        $this->setExpectedException('Model\Package\RuntimeException', "There is no package with name 'invalid'");
-        $model = $this->_getModel();
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage("There is no package with name 'invalid'");
+        $model = $this->getModel();
         $model->getPackage('invalid');
     }
 
     public function testGetPackageError()
     {
-        $this->setExpectedException('Model\Package\RuntimeException', 'metadata error');
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage('metadata error');
+        $storage = $this->createMock('Model\Package\Storage\Direct');
         $storage->method('readMetadata')->will($this->throwException(new \RuntimeException('metadata error')));
-        $model = $this->_getModel(array('Model\Package\Storage\Direct' => $storage));
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            [Direct::class, $storage],
+            [Packages::class, static::$serviceManager->get(Packages::class)],
+        ]);
+
+        $model = new PackageManager($serviceManager);
+
         $model->getPackage('package1');
     }
 
@@ -96,9 +127,9 @@ class PackageManagerTest extends \Model\Test\AbstractTest
             'Platform' => 'windows',
             'Comment' => 'Existing package 1',
             'Id' => '1415958319',
-            'NumNonnotified' => '1',
+            'NumPending' => '1',
+            'NumRunning' => '1',
             'NumSuccess' => '1',
-            'NumNotified' => '1',
             'NumError' => '1',
         );
         $package2 =  array (
@@ -110,9 +141,9 @@ class PackageManagerTest extends \Model\Test\AbstractTest
             'Platform' => 'linux',
             'Comment' => 'Existing package 2',
             'Id' => '1415958320',
-            'NumNonnotified' => '1',
+            'NumPending' => '1',
+            'NumRunning' => '0',
             'NumSuccess' => '0',
-            'NumNotified' => '0',
             'NumError' => '0',
         );
         return array(
@@ -137,7 +168,7 @@ class PackageManagerTest extends \Model\Test\AbstractTest
      */
     public function testGetPackages($order, $direction, $package1, $package2)
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $packages = iterator_to_array($model->getPackages($order, $direction));
         $this->assertContainsOnlyInstancesOf('Model\Package\Package', $packages);
         $this->assertEquals($package1, $packages[0]->getArrayCopy());
@@ -146,533 +177,49 @@ class PackageManagerTest extends \Model\Test\AbstractTest
 
     public function testGetAllNames()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $this->assertEquals(array('package1', 'package2'), $model->getAllNames());
     }
 
     public function testGetAllNamesEmpty()
     {
-        $model = $this->_getModel();
-        \Library\Application::getService('Database\Table\Packages')->delete(true);
+        $model = $this->getModel();
+        static::$serviceManager->get('Database\Table\Packages')->delete(true);
         $this->assertEquals(array(), $model->getAllNames());
     }
 
-    public function buildProvider()
+    public function testBuildPackage()
     {
-        $sourceContent = 'abcdef';
-        $sourceHash = sha1($sourceContent);
-        $sourceSize = strlen($sourceContent);
+        $data = ['Name' => 'test'];
 
-        $archiveContent = 'ghi';
-        $archiveHash = sha1($archiveContent);
-        $archiveSize = strlen($archiveContent);
+        $packageBuilder = $this->createMock(PackageBuilder::class);
+        $packageBuilder->expects($this->once())->method('buildPackage')->with($data, true);
 
-        return array(
-            array('windows', 'WINDOWS', $archiveContent, true, $archiveHash, $archiveSize, true, true),
-            array('windows', 'WINDOWS', $archiveContent, true, $archiveHash, $archiveSize, false, true),
-            array('linux', 'LINUX', $sourceContent, false, $sourceHash, $sourceSize, true, true),
-            array('linux', 'LINUX', $sourceContent, false, $sourceHash, $sourceSize, false, false),
-            array('mac', 'MacOSX',  null, false, null, 0, true, true),
-            array('mac', 'MacOSX',  null, false, null, 0, false, false),
-        );
-    }
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->with(PackageBuilder::class)->willReturn($packageBuilder);
 
-    /**
-     * Test build() method
-     *
-     * @param string $platform Internal platform descriptor (windows, linux, mac)
-     * @param mixed $platformValue Database identifier (WINDOWS, LINUX, MacOSX)
-     * @param string $content File content to validate (NULL to simulate no source file and no archive)
-     * @param bool $createArchive Create archive, otherwise source file is assumed to be archive
-     * @param string $hash Expected hash
-     * @param integer $size Expected size
-     * @param bool $deleteSource Passed to build()
-     * @param bool $deleteArchive Expected argument for StorageInterface::write()
-     * @dataProvider buildProvider
-     */
-    public function testBuild(
-        $platform,
-        $platformValue,
-        $content,
-        $createArchive,
-        $hash,
-        $size,
-        $deleteSource,
-        $deleteArchive
-    )
-    {
-        // vfsStream is difficult to set up from a data provider, so the files are created here.
-        $root = vfsStream::setup('root');
-        if ($content) {
-            if ($createArchive) {
-                $fileLocation = 'source_file';
-                $archive = vfsStream::newFile('archive')->withContent($content)->at($root)->url();
-            } else {
-                $fileLocation = vfsStream::newFile('test')->withContent($content)->at($root)->url();
-                $archive = $fileLocation;
-            }
-        } else {
-            $fileLocation = '';
-            $archive = '';
-        }
-
-        // Input data. More fields are added and tested internally
-        $data = array(
-            'Id' => 1423401452,
-            'Platform' => $platform,
-            'Name' => 'package_new',
-            'Priority' => '7',
-            'Comment' => 'New package',
-            'FileLocation' => $fileLocation,
-        );
-
-        // Callback to test the static part of package data (input values)
-        $checkStaticData = function($testData) use ($data) {
-            unset($testData['Hash']);
-            unset($testData['Size']);
-            return ($testData === $data);
-        };
-
-        // Callback to test the added file properties
-        $checkFileProperties = function($testData) use ($hash, $size) {
-            return ($testData['Hash'] === $hash and $testData['Size'] === $size);
-        };
-
-        // Storage mock
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
-        $storage->expects($this->once())
-                ->method('prepare')
-                ->with($this->callback($checkStaticData))
-                ->willReturn('Path');
-        $storage->expects($this->once())
-                ->method('write')
-                ->with(
-                    $this->logicalAnd(
-                        $this->callback($checkStaticData),
-                        $this->callback($checkFileProperties)
-                    ),
-                    $archive,
-                    $deleteArchive
-                )
-                ->willReturn(23);
-
-        $packages = \Library\Application::getService('Database\Table\Packages');
-
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\Packages', true, $packages),
-                    array('Library\Now', true, new \DateTime('2015-02-08 14:17:32')),
-                    array('Model\Package\Storage\Direct', true, $storage),
-                )
-            )
-        );
-
-        // Model mock
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('packageExists', 'autoArchive', 'delete'))
-                      ->setConstructorArgs(array($serviceManager))
-                      ->getMock();
-        $model->expects($this->once())->method('packageExists')->willReturn(false);
-        $model->expects($this->once())
-              ->method('autoArchive')
-              ->with(
-                  $this->callback($checkStaticData),
-                  'Path',
-                  $deleteSource
-              )
-              ->willReturn($archive);
-        $model->expects($this->never())->method('delete');
-
-        // Invoke build method
-        $model->build($data, $deleteSource);
-
-        // Test database results
-        $connection = $this->getConnection();
-        $dataset = new \PHPUnit_Extensions_Database_DataSet_ReplacementDataSet(
-            $this->_loadDataSet('Build')
-        );
-        $dataset->addFullReplacement('#PLATFORM#', $platformValue);
-        $dataset->addFullReplacement('#SIZE#', $size);
-        $this->assertTablesEqual(
-            $dataset->getTable('download_available'),
-            $connection->createQueryTable('download_available', 'SELECT * FROM download_available ORDER BY fileid')
-        );
-        $this->assertTablesEqual(
-            $dataset->getTable('download_enable'),
-            $connection->createQueryTable(
-                'download_enable',
-                'SELECT fileid, info_loc, pack_loc FROM download_enable ORDER BY fileid'
-            )
-        );
-    }
-
-    public function testBuildInvalidPlatform()
-    {
-        $data = array('Name' => 'test', 'FileLocation' => null, 'Platform' => 'invalid');
-
-        $hydrator = $this->getMock('Zend\Stdlib\Hydrator\ArraySerializable');
-        $hydrator->expects($this->once())->method('extract')->willReturn(array('osname' => null));
-
-        $packages = $this->getMockBuilder('Database\Table\Packages')->disableOriginalConstructor()->getMock();
-        $packages->expects($this->once())->method('getHydrator')->willReturn($hydrator);
-
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
-
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\Packages', true, $packages),
-                    array('Library\Now', true, new \DateTime),
-                    array('Model\Package\Storage\Direct', true, $storage),
-                )
-            )
-        );
-
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('packageExists', 'autoArchive', 'delete'))
-                      ->setConstructorArgs(array($serviceManager))
-                      ->getMock();
-        $model->method('packageExists')->with('test')->willReturn(false);
-        $model->expects($this->once())->method('delete')->with('test');
-
-        try {
-            $model->build($data, false);
-            $this->fail('Expected exception was not thrown');
-        } catch (\Model\Package\RuntimeException $e) {
-            $this->assertEquals('Invalid platform: invalid', $e->getMessage());
-        }
-    }
-
-    public function testBuildPackageExists()
-    {
-        $data = array(
-            'Platform' => 'linux',
-            'Name' => 'package1',
-        );
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
-        $storage->expects($this->never())->method('write');
-        $packages = $this->getMockBuilder('Database\Table\Packages')->disableOriginalConstructor()->getMock();
-        $packages->expects($this->never())->method('insert');
-
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\Packages', true, $packages),
-                    array('Library\Now', true, new \DateTime),
-                    array('Model\Package\Storage\Direct', true, $storage),
-                )
-            )
-        );
-
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('packageExists'))
-                      ->setConstructorArgs(array($serviceManager))
-                      ->getMock();
-        $model->expects($this->once())->method('packageExists')->with('package1')->willReturn(true);
-        try {
-            $model->build($data, false);
-            $this->fail('Expected exception was not thrown');
-        } catch (\Model\Package\RuntimeException $e) {
-            $this->assertEquals("Package 'package1' already exists", $e->getMessage());
-        }
-    }
-
-    public function buildFileErrorProvider()
-    {
-        return array(
-            array(false, "Could not determine size of 'vfs://root/nonexistent'"),
-            array(true, "Could not compute SHA1 hash of 'statonly://'"),
-        );
-    }
-
-    /**
-     * Test runtime errors concerning source file
-     *
-     * @param bool $fileExists Simulate read failure on existing file
-     * @param string $message Expected exception message
-     * @dataProvider buildFileErrorProvider
-     */
-    public function testBuildFileError($fileExists, $message)
-    {
-        if ($fileExists) {
-            $source = 'statonly://';
-        } else {
-            $source = vfsStream::setup('root')->url() . '/nonexistent';
-        }
-
-        $data = array(
-            'Platform' => 'linux',
-            'Name' => 'package_new',
-            'FileLocation' => $source,
-        );
-
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
-        $storage->expects($this->once())->method('prepare');
-        $storage->expects($this->never())->method('write');
-
-        $packages = $this->getMockBuilder('Database\Table\Packages')->disableOriginalConstructor()->getMock();
-        $packages->expects($this->never())->method('insert');
-
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\Packages', true, $packages),
-                    array('Library\Now', true, new \DateTime),
-                    array('Model\Package\Storage\Direct', true, $storage),
-                )
-            )
-        );
-
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('packageExists', 'autoArchive', 'delete'))
-                      ->setConstructorArgs(array($serviceManager))
-                      ->getMock();
-        $model->expects($this->once())->method('packageExists')->willReturn(false);
-        $model->expects($this->once())->method('autoArchive')->willReturn($source);
-        $model->expects($this->once())->method('delete')->with('package_new');
-
-        $this->setExpectedException('Model\Package\RuntimeException', $message);
-        $model->build($data, false);
-    }
-
-    public function testAutoArchiveWindowsCreateArchiveKeepSource()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(true);
-        $archiveManager->expects($this->once())
-                       ->method('isArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $source)
-                       ->willReturn(false);
-        $archiveManager->expects($this->once())
-                       ->method('createArchive')
-                       ->with(\Library\ArchiveManager::ZIP, 'path/archive')
-                       ->willReturn('archive');
-        $archiveManager->expects($this->once())
-                       ->method('addFile')
-                       ->with('archive', $source, 'FileName');
-        $archiveManager->expects($this->once())
-                       ->method('closeArchive')
-                       ->with('archive', false);
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertEquals('path/archive', $model->autoArchive($data, 'path', false));
-        $this->assertFileExists($source);
-    }
-
-    public function testAutoArchiveWindowsCreateArchiveDeleteSource()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(true);
-        $archiveManager->expects($this->once())
-                       ->method('isArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $source)
-                       ->willReturn(false);
-        $archiveManager->expects($this->once())
-                       ->method('createArchive')
-                       ->with(\Library\ArchiveManager::ZIP, 'path/archive')
-                       ->willReturn('archive');
-        $archiveManager->expects($this->once())
-                       ->method('addFile')
-                       ->with('archive', $source, 'FileName');
-        $archiveManager->expects($this->once())
-                       ->method('closeArchive')
-                       ->with('archive', false);
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertEquals('path/archive', $model->autoArchive($data, 'path', true));
-        $this->assertFileNotExists($source);
-    }
-
-    public function testAutoArchiveWindowsErrorOnArchiveCreation()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(true);
-        $archiveManager->expects($this->once())
-                       ->method('isArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $source)
-                       ->willReturn(false);
-        $archiveManager->expects($this->once())
-                       ->method('createArchive')
-                       ->with(\Library\ArchiveManager::ZIP, 'path/archive')
-                       ->will($this->throwException(new \Model\Package\RuntimeException('createArchive')));
-        $archiveManager->expects($this->never())
-                       ->method('addFile');
-        $archiveManager->expects($this->never())
-                       ->method('closeArchive');
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        try {
-            $model->autoArchive($data, 'path', true);
-            $this->fail('Expected exception was not thrown');
-        } catch (\Model\Package\RuntimeException $e) {
-            $this->assertEquals('createArchive', $e->getMessage());
-            $this->assertFileExists($source);
-        }
-    }
-
-    public function testAutoArchiveWindowsErrorAfterArchiveCreation()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $archive = $root->url() . '/archive';
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(true);
-        $archiveManager->expects($this->once())
-                       ->method('isArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $source)
-                       ->willReturn(false);
-        $archiveManager->expects($this->once())
-                       ->method('createArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $archive)
-                       ->will(
-                           $this->returnCallback(
-                               function () use ($root) {
-                                   return vfsStream::newFile('archive')->at($root)->url();
-                               }
-                           )
-                       );
-        $archiveManager->expects($this->once())
-                       ->method('addFile')
-                       ->with($archive, $source, 'FileName');
-        $archiveManager->expects($this->at(4))
-                       ->method('closeArchive')
-                       ->with($archive, false)
-                       ->will($this->throwException(new \Model\Package\RuntimeException('closeArchive')));
-        $archiveManager->expects($this->at(5))
-                       ->method('closeArchive')
-                       ->with($archive, true);
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        try {
-            $model->autoArchive($data, $root->url(), true);
-            $this->fail('Expected exception was not thrown');
-        } catch (\Model\Package\RuntimeException $e) {
-            $this->assertEquals('closeArchive', $e->getMessage());
-            $this->assertFileExists($source);
-            $this->assertFileNotExists($archive);
-        }
-    }
-
-    public function testAutoArchiveWindowsAlreadyArchive()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(true);
-        $archiveManager->expects($this->once())
-                       ->method('isArchive')
-                       ->with(\Library\ArchiveManager::ZIP, $source)
-                       ->willReturn(true);
-        $archiveManager->expects($this->never())
-                       ->method('createArchive');
-        $archiveManager->expects($this->never())
-                       ->method('addFile');
-        $archiveManager->expects($this->never())
-                       ->method('closeArchive');
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertEquals($source, $model->autoArchive($data, 'path', true));
-        $this->assertFileExists($source);
-    }
-
-    public function testAutoArchiveWindowsArchiveNotSupported()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'windows');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->once())
-                       ->method('isSupported')
-                       ->with(\Library\ArchiveManager::ZIP)
-                       ->willReturn(false);
-        $archiveManager->expects($this->never())
-                       ->method('isArchive');
-        $archiveManager->expects($this->never())
-                       ->method('createArchive');
-        $archiveManager->expects($this->never())
-                       ->method('addFile');
-        $archiveManager->expects($this->never())
-                       ->method('closeArchive');
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertEquals($source, @$model->autoArchive($data, 'path', true));
-        $this->assertFileExists($source);
-    }
-
-    public function testAutoArchiveUnsupportedPlatform()
-    {
-        $root = vfsstream::setup('root');
-        $source = vfsStream::newFile('source')->at($root)->url();
-        $data = array('FileLocation' => $source, 'FileName' => 'FileName', 'Platform' => 'linux');
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->never())
-                       ->method('isSupported');
-        $archiveManager->expects($this->never())
-                       ->method('isArchive');
-        $archiveManager->expects($this->never())
-                       ->method('createArchive');
-        $archiveManager->expects($this->never())
-                       ->method('addFile');
-        $archiveManager->expects($this->never())
-                       ->method('closeArchive');
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertEquals($source, @$model->autoArchive($data, 'path', true));
-        $this->assertFileExists($source);
-    }
-
-    public function testAutoArchiveNoSourceFile()
-    {
-        $source = '';
-        $data = array('FileLocation' => $source);
-        $archiveManager = $this->getMock('Library\ArchiveManager');
-        $archiveManager->expects($this->never())
-                       ->method('isSupported');
-        $archiveManager->expects($this->never())
-                       ->method('isArchive');
-        $archiveManager->expects($this->never())
-                       ->method('createArchive');
-        $archiveManager->expects($this->never())
-                       ->method('addFile');
-        $archiveManager->expects($this->never())
-                       ->method('closeArchive');
-        $model = $this->_getModel(array('Library\ArchiveManager' => $archiveManager));
-        $this->assertSame($source, @$model->autoArchive($data, 'path', true));
+        $model = new PackageManager($serviceManager);
+        $model->buildPackage($data, true);
     }
 
     public function testDelete()
     {
-        $storage = $this->getMockBuilder('Model\Package\Storage\Direct')->disableOriginalConstructor()->getMock();
+        $storage = $this->createMock('Model\Package\Storage\Direct');
         $storage->expects($this->once())->method('cleanup')->with('1415958319');
-        $model = $this->_getModel(array('Model\Package\Storage\Direct' => $storage));
-        $model->delete('package1');
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            [Direct::class, $storage],
+            [ClientConfig::class, static::$serviceManager->get(ClientConfig::class)],
+            [Packages::class, static::$serviceManager->get(Packages::class)],
+        ]);
+
+        $model = new PackageManager($serviceManager);
+        $model->deletePackage('package1');
 
         $connection = $this->getConnection();
-        $dataset = $this->_loadDataSet('Delete');
+        $dataset = $this->loadDataSet('Delete');
         $this->assertTablesEqual(
             $dataset->getTable('download_available'),
             $connection->createQueryTable('download_available', 'SELECT * FROM download_available ORDER BY fileid')
@@ -686,25 +233,66 @@ class PackageManagerTest extends \Model\Test\AbstractTest
         );
         $this->assertTablesEqual(
             $dataset->getTable('devices'),
-            $connection->createQueryTable('devices', 'SELECT hardware_id, name, ivalue FROM devices ORDER BY ivalue')
+            $connection->createQueryTable(
+                'devices',
+                'SELECT hardware_id, name, ivalue FROM devices ORDER BY ivalue, name'
+            )
         );
     }
 
     public function testDeleteException()
     {
-        $this->setExpectedException('Model\Package\RuntimeException', "Package 'invalid' does not exist");
-        $model = $this->_getModel();
-        $model->delete('invalid');
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage("Package 'invalid' does not exist");
+        $model = $this->getModel();
+        $model->deletePackage('invalid');
+    }
+
+    public function testUpdatePackage()
+    {
+        $newPackageData = array('Name' => 'new_name');
+
+        $newPackage = $this->createMock('Model\Package\Package');
+        $newPackage->method('offsetGet')->with('Id')->willReturn('new_id');
+
+        /** @var Stub|Package */
+        $package = $this->createStub(Package::class);
+        $package->method('offsetGet')->willReturnMap([['Id', 'old_id'], ['Name', 'old_name']]);
+
+        $model = $this->createPartialMock(
+            PackageManager::class,
+            ['buildPackage', 'getPackage', 'updateAssignments', 'deletePackage']
+        );
+        $model->expects($this->once())->method('buildPackage')->with($newPackageData, true);
+        $model->method('getPackage')->with('new_name')->willReturn($newPackage);
+        $model->expects($this->once())->method('updateAssignments')->with('old_id', 'new_id', 'p', 'r', 's', 'e', 'g');
+        $model->expects($this->once())->method('deletePackage')->with('old_name');
+
+        $model->updatePackage($package, $newPackageData, true, 'p', 'r', 's', 'e', 'g');
     }
 
     public function testUpdateAssignmentsNoActionRequired()
     {
-        $this->_getModel()->updateAssignments(1, 3, false, false, false, false, false);
+        $this->getModel()->updateAssignments(1415958319, 3, false, false, false, false, false);
 
         $this->assertTablesEqual(
-            $this->_loadDataSet()->getTable('devices'),
+            $this->loadDataSet()->getTable('devices'),
             $this->getConnection()->createQueryTable(
-                'devices', 'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices'
+                'devices',
+                'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ORDER BY hardware_id, name, ivalue'
+            )
+        );
+    }
+
+    public function testUpdateAssignmentsNoMatch()
+    {
+        $this->getModel()->updateAssignments(1415958320, 3, false, true, false, false, false);
+
+        $this->assertTablesEqual(
+            $this->loadDataSet()->getTable('devices'),
+            $this->getConnection()->createQueryTable(
+                'devices',
+                'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ORDER BY hardware_id, name, ivalue'
             )
         );
     }
@@ -713,12 +301,12 @@ class PackageManagerTest extends \Model\Test\AbstractTest
     {
         return array(
             array('UpdateNoFilters', true, true, true, true, true),
-            array('UpdateNonNotified', true, false, false, false, false),
-            array('UpdateSuccess', false, true, false, false, false),
-            array('UpdateNotified', false, false, true, false, false),
+            array('UpdatePending', true, false, false, false, false),
+            array('UpdateRunning', false, true, false, false, false),
+            array('UpdateSuccess', false, false, true, false, false),
             array('UpdateError', false, false, false, true, false),
             array('UpdateGroups', false, false, false, false, true),
-            array('UpdateCombined', true, true, false, true, false),
+            array('UpdateCombined', true, false, true, true, false),
         );
     }
 
@@ -728,40 +316,58 @@ class PackageManagerTest extends \Model\Test\AbstractTest
      */
     public function testUpdateAssignments(
         $datasetName,
-        $deployNonnotified,
+        $deployPending,
+        $deployRunning,
         $deploySuccess,
-        $deployNotified,
         $deployError,
         $deployGroups
-    )
-    {
-        $model = $this->_getModel(array('Library\Now' => new \DateTime('2015-02-08 14:17:29')));
+    ) {
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            ['Library\Now', new DateTime('2015-02-08 14:17:29')],
+            [ClientConfig::class, static::$serviceManager->get(ClientConfig::class)],
+            [GroupInfo::class, static::$serviceManager->get(GroupInfo::class)],
+        ]);
+
+        $model = new PackageManager($serviceManager);
         $model->updateAssignments(
             1415958319,
             3,
-            $deployNonnotified,
+            $deployPending,
+            $deployRunning,
             $deploySuccess,
-            $deployNotified,
             $deployError,
             $deployGroups
         );
 
-        $dataset = $this->_loadDataSet($datasetName);
+        $dataset = $this->loadDataSet($datasetName);
         $this->assertTablesEqual(
             $dataset->getTable('devices'),
             $this->getConnection()->createQueryTable(
-                'devices', 'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices'
+                'devices',
+                'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ORDER BY hardware_id, name, ivalue'
             )
         );
     }
 
     public function testUpdateAssignmentsException()
     {
-        $this->setExpectedException('Model\Package\RuntimeException', 'database error');
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage('database error');
         $data = array('Timestamp' => new \DateTime('@1415958319'));
-        $clientConfig = $this->getMockBuilder('Database\Table\ClientConfig')->disableOriginalConstructor()->getMock();
+        $clientConfig = $this->createMock('Database\Table\ClientConfig');
         $clientConfig->method('getSql')->will($this->throwException(new \RuntimeException('database error')));
-        $model = $this->_getModel(array('Database\Table\ClientConfig' => $clientConfig));
+
+        /** @var MockObject|ServiceManager */
+        $serviceManager = $this->createMock(ServiceManager::class);
+        $serviceManager->method('get')->willReturnMap([
+            [ClientConfig::class, $clientConfig],
+            [GroupInfo::class, static::$serviceManager->get(GroupInfo::class)],
+            ['Library\Now', static::$serviceManager->get('Library\Now')],
+        ]);
+
+        $model = new PackageManager($serviceManager);
         $model->updateAssignments(1, 2, true, true, true, true, true);
     }
 }

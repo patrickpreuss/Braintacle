@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Strategy for CurrentResolution attribute
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,10 +28,10 @@ namespace Database\Hydrator\Strategy\DisplayControllers;
  * A value of '0 x 0' is converted to NULL. This conversion is not reverted on
  * extraction.
  */
-class CurrentResolution implements \Zend\Stdlib\Hydrator\Strategy\StrategyInterface
+class CurrentResolution implements \Laminas\Hydrator\Strategy\StrategyInterface
 {
     /** {@inheritdoc} */
-    public function hydrate($value)
+    public function hydrate($value, ?array $data)
     {
         if ($value === '0 x 0') {
             $value = null;
@@ -39,7 +40,7 @@ class CurrentResolution implements \Zend\Stdlib\Hydrator\Strategy\StrategyInterf
     }
 
     /** {@inheritdoc} */
-    public function extract($value)
+    public function extract($value, ?object $object = null)
     {
         return $value;
     }

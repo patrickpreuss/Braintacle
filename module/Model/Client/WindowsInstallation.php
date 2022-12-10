@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Information about a client's windows installation
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -25,13 +26,14 @@ namespace Model\Client;
  * Information about a client's windows installation
  *
  * @property string $Workgroup Workgroup/domain
- * @property string $UserDomain Domain of logged in user (for local accounts this is identical to the computer name)
+ * @property string $UserDomain Domain of logged in user (for local accounts this is identical to the client name)
  * @property string $Company Company name (set during installation)
  * @property string $Owner Owner (set during installation)
  * @property string $ProductKey Product Key
  * @property string $ProductId Product ID (installation-specific, may or may not be unique)
  * @property string $ManualProductKey Manually overridden product key (entered in Braintacle console)
+ * @property string $CpuArchitecture CPU architecture (may be different from physical CPU's capabilities)
  */
-class WindowsInstallation extends \ArrayObject
+class WindowsInstallation extends \Model\AbstractModel
 {
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * The Database module
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,7 +22,7 @@
 
 namespace Database;
 
-use Zend\ModuleManager\Feature;
+use Laminas\ModuleManager\Feature;
 
 /**
  * The Database module
@@ -32,64 +33,24 @@ use Zend\ModuleManager\Feature;
  * @codeCoverageIgnore
  */
 class Module implements
-Feature\AutoloaderProviderInterface,
-Feature\ConfigProviderInterface,
-Feature\BootstrapListenerInterface,
-Feature\InitProviderInterface
+    Feature\ConfigProviderInterface,
+    Feature\InitProviderInterface
 {
-    /**
-     * @internal
-     */
-    public function init(\Zend\ModuleManager\ModuleManagerInterface $manager)
+    /** {@inheritdoc} */
+    public function init(\Laminas\ModuleManager\ModuleManagerInterface $manager)
     {
         $manager->loadModule('Library');
         $manager->loadModule('Model');
     }
 
-    /**
-     * @internal
-     */
+    /** {@inheritdoc} */
     public function getConfig()
     {
-        // Static configuration part
-        $config = array(
+        return array(
             'service_manager' => array(
                 'abstract_factories' => array(
+                    'Database\Service\AbstractDatabaseFactory',
                     'Database\Service\AbstractTableFactory',
-                ),
-                'factories' => array(
-                    'Db' => 'Zend\Db\Adapter\AdapterServiceFactory',
-                    'Database\Nada' => 'Database\Service\NadaFactory',
-                    'Database\SchemaManager' => 'Database\Service\SchemaManagerFactory',
-                ),
-            ),
-        );
-
-        if (\Library\Application::isTest()) {
-            // Test setup with in-memory database
-            $config['db'] = array('driver' => 'Pdo_Sqlite');
-        } else {
-            // Merge database configuration from config file
-            $configFileContent = \Library\Application::getConfig();
-            if (!is_array($configFileContent['database'])) {
-                throw new \RuntimeException('Config file has no "database" section');
-            }
-            $config['db'] = $configFileContent['database'];
-        }
-        $config['db']['charset'] = 'utf8';
-
-        return $config;
-    }
-
-    /**
-     * @internal
-     */
-    public function getAutoloaderConfig()
-    {
-        return array(
-            'Zend\Loader\StandardAutoloader' => array(
-                'namespaces' => array(
-                    __NAMESPACE__ => __DIR__,
                 ),
             ),
         );
@@ -101,16 +62,8 @@ Feature\InitProviderInterface
      * @param string $path Optional path component that is appended to the module root path
      * @return string Absolute path to requested file/directory (directories without trailing slash)
      */
-    static function getPath($path='')
+    public static function getPath($path = '')
     {
         return \Library\Application::getPath('module/Database/' . $path);
-    }
-
-    /**
-     * @internal
-     */
-    public function onBootstrap(\Zend\EventManager\EventInterface $e)
-    {
-        $e->getParam('application')->getServiceManager()->get('Database\Nada')->setTimezone();
     }
 }

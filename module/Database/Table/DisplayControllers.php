@@ -1,4 +1,5 @@
 <?php
+
 /**
  * "videos" table
  *
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "videos" table
@@ -30,11 +31,11 @@ class DisplayControllers extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'videos';
 
-        $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $this->_hydrator->setNamingStrategy(
             new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
                 array(
@@ -49,14 +50,14 @@ class DisplayControllers extends \Database\AbstractTable
         // original values can be discarded.
         $this->_hydrator->addStrategy(
             'Memory',
-            new \Database\Hydrator\Strategy\DisplayControllers\Memory
+            new \Database\Hydrator\Strategy\DisplayControllers\Memory()
         );
         $this->_hydrator->addStrategy(
             'CurrentResolution',
-            new \Database\Hydrator\Strategy\DisplayControllers\CurrentResolution
+            new \Database\Hydrator\Strategy\DisplayControllers\CurrentResolution()
         );
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
             $this->_hydrator,
             $serviceLocator->get('Model\Client\Item\DisplayController')
         );

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Validate string to not match any value in a given array
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,14 +25,14 @@ namespace Library\Validator;
 /**
  * Validate string to not match any value in a given array
  *
- * This validator does the opposite of the ZF's InArray validator, but not all
+ * This validator does the opposite of Laminas' InArray validator, but not all
  * functionality of InArray is supported. The validator has 2 options:
  *
  * - Haystack (required): an array to validate a string against
  * - CaseSensitivity: One of the CASE_* constants defined by this validator,
  *   default is CASE_SENSITIVE.
  */
-class NotInArray extends \Zend\Validator\AbstractValidator
+class NotInArray extends \Laminas\Validator\AbstractValidator
 {
     /**
      * Case sensitive comparision
@@ -44,12 +45,10 @@ class NotInArray extends \Zend\Validator\AbstractValidator
     const CASE_INSENSITIVE = 1;
 
     /**
-     * @internal
      * Key for in_array message template
      */
     const IN_ARRAY = 'inArray';
 
-    // @codingStandardsIgnoreStart
     /**
      * Validation failure message template definitions
      * @var array
@@ -57,10 +56,6 @@ class NotInArray extends \Zend\Validator\AbstractValidator
     protected $messageTemplates = array(
         self::IN_ARRAY => "'%value%' is in the list of invalid values",
     );
-
-    /** {@inheritdoc} */
-    protected static $defaultTranslatorTextDomain = 'default';
-    // @codingStandardsIgnoreEnd
 
     /**
      * Haystack option

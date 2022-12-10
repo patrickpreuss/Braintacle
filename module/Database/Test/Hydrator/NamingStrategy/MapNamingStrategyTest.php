@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for MapNamingStrategy
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,19 +22,51 @@
 
 namespace Database\Test\Hydrator\NamingStrategy;
 
-class MapNamingStrategyTest extends \PHPUnit_Framework_TestCase
+class MapNamingStrategyTest extends \PHPUnit\Framework\TestCase
 {
+    public function testGetMapswithAutomaticExtractionMap()
+    {
+        $hydrationMap = ['extracted' => 'hydrated'];
+        $extractionMap = ['hydrated' => 'extracted'];
+
+        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy($hydrationMap);
+        $this->assertEquals($hydrationMap, $namingStrategy->getHydrationMap());
+        $this->assertEquals($extractionMap, $namingStrategy->getExtractionMap());
+    }
+
+    public function testGetMapswithManualExtractionMap()
+    {
+        $hydrationMap = ['extracted1' => 'hydrated1'];
+        $extractionMap = ['hydrated2' => 'extracted2'];
+
+        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy($hydrationMap, $extractionMap);
+        $this->assertEquals($hydrationMap, $namingStrategy->getHydrationMap());
+        $this->assertEquals($extractionMap, $namingStrategy->getExtractionMap());
+    }
+
     public function testHydrateValid()
     {
-        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array('extracted' => 'hydrated'));
-        $this->assertEquals('hydrated', $namingStrategy->hydrate('extracted'));
+        $mapping = array(
+            'extracted1' => 'hydrated1',
+            'extracted2' => 'hydrated2',
+            'noop1' => 'noop1',
+            'noop2' => 'noop2',
+        );
+        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy($mapping);
+        $this->assertEquals('hydrated1', $namingStrategy->hydrate('extracted1'));
+        $this->assertEquals('hydrated1', $namingStrategy->hydrate('hydrated1'));
+        $this->assertEquals('hydrated2', $namingStrategy->hydrate('extracted2'));
+        $this->assertEquals('hydrated2', $namingStrategy->hydrate('hydrated2'));
+        $this->assertEquals('noop1', $namingStrategy->hydrate('noop1'));
+        $this->assertEquals('noop2', $namingStrategy->hydrate('noop2'));
     }
 
     public function testHydrateInvalid()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Unknown column name: extracted');
-        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array());
-        $namingStrategy->hydrate('extracted');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Unknown column name: invalid');
+        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array('extracted1' => 'hydrated1'));
+        $namingStrategy->hydrate('invalid');
     }
 
     public function testExtractValid()
@@ -44,20 +77,9 @@ class MapNamingStrategyTest extends \PHPUnit_Framework_TestCase
 
     public function testExtractInvalid()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Unknown property name: hydrated');
-        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array());
-        $namingStrategy->extract('hydrated');
-    }
-
-    public function testGetHydratorMap()
-    {
-        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array('extracted' => 'hydrated'));
-        $this->assertEquals(array('extracted' => 'hydrated'), $namingStrategy->getHydratorMap());
-    }
-
-    public function testGetExtractorMap()
-    {
-        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array('extracted' => 'hydrated'));
-        $this->assertEquals(array('hydrated' => 'extracted'), $namingStrategy->getExtractorMap());
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Unknown property name: invalid');
+        $namingStrategy = new \Database\Hydrator\NamingStrategy\MapNamingStrategy(array('extracted1' => 'hydrated1'));
+        $namingStrategy->extract('invalid');
     }
 }

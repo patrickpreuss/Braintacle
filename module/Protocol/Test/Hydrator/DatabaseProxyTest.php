@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for DatabaseProxy hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,11 +22,11 @@
 
 namespace Protocol\Test\Hydrator;
 
-class DatabaseProxyTest extends \PHPUnit_Framework_TestCase
+class DatabaseProxyTest extends \PHPUnit\Framework\TestCase
 {
     public function testGetHydrator()
     {
-        $hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $proxy = new \Protocol\Hydrator\DatabaseProxy($hydrator);
         $this->assertSame($hydrator, $proxy->getHydrator());
     }
@@ -33,8 +34,8 @@ class DatabaseProxyTest extends \PHPUnit_Framework_TestCase
     public function testHydrate()
     {
         $data = array('KEY1' => 'value1', 'KEY2' => 'value2');
-        $object = new \ArrayObject;
-        $hydrator = $this->getMock('Zend\Stdlib\Hydrator\ArraySerializable');
+        $object = new \ArrayObject();
+        $hydrator = $this->createMock(\Laminas\Hydrator\HydratorInterface::class);
         $hydrator->expects($this->once())
                  ->method('hydrate')
                  ->with(array('key1' => 'value1', 'key2' => 'value2'))
@@ -45,8 +46,8 @@ class DatabaseProxyTest extends \PHPUnit_Framework_TestCase
 
     public function testExtract()
     {
-        $object = new \ArrayObject;
-        $hydrator = $this->getMock('Zend\Stdlib\Hydrator\ArraySerializable');
+        $object = new \ArrayObject();
+        $hydrator = $this->createMock(\Laminas\Hydrator\HydratorInterface::class);
         $hydrator->expects($this->once())
                  ->method('extract')
                  ->with($object)

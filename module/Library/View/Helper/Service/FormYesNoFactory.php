@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Factory for FormYesNo
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,16 +25,18 @@ namespace Library\View\Helper\Service;
 /**
  * Factory for FormYesNo
  */
-class FormYesNoFactory implements \Zend\ServiceManager\FactoryInterface
+class FormYesNoFactory implements \Laminas\ServiceManager\Factory\FactoryInterface
 {
-    /**
-     * @internal
-     */
-    public function createService(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
-    {
+    /** {@inheritdoc} */
+    public function __invoke(
+        \Interop\Container\ContainerInterface $container,
+        $requestedName,
+        array $options = null
+    ) {
+        $plugins = $container->get('ViewHelperManager');
         return new \Library\View\Helper\FormYesNo(
-            $serviceLocator->get('Translate'),
-            $serviceLocator->get('HtmlTag')
+            $plugins->get('translate'),
+            $plugins->get('htmlElement')
         );
     }
 }

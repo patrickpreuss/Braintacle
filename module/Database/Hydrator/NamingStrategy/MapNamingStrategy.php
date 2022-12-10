@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Naming strategy using a map
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,22 +22,63 @@
 
 namespace Database\Hydrator\NamingStrategy;
 
+use Laminas\Hydrator\NamingStrategy\MapNamingStrategy as WrappedMapNamingStrategy;
+
 /**
  * Naming strategy using a map
  *
- * Extends MapNamingStrategy to throw an exception on undefined values.
- * Hydrated/extracted names must differ from the original name.
+ * Wrapper for \Laminas\Hydrator\NamingStrategy\MapNamingStrategy throwing an
+ * exception on undefined values. hydrate() accepts both extracted and hydrated
+ * names.
  */
-class MapNamingStrategy extends \Zend\Stdlib\Hydrator\NamingStrategy\MapNamingStrategy
+class MapNamingStrategy implements \Laminas\Hydrator\NamingStrategy\NamingStrategyInterface
 {
+    /**
+     * Wrapped MapNamingStrategy
+     * @var WrappedMapNamingStrategy
+     */
+    protected $mapNamingStrategy;
+
+    /**
+     * Hydration map
+     * @var array
+     */
+    protected $hydrationMap;
+
+    /**
+     * Extraction map
+     * @var array
+     */
+    protected $extractionMap;
+
+    /**
+     * Constructor.
+     *
+     * @param array $hydrationMap Hydradion map
+     * @param null|array $extractionMap Optional extraction map, if not the reverse of hydration map.
+     */
+    public function __construct(array $hydrationMap, ?array $extractionMap = null)
+    {
+        if ($extractionMap === null) {
+            $extractionMap = array_flip($hydrationMap);
+        }
+        $this->mapNamingStrategy = WrappedMapNamingStrategy::createFromAsymmetricMap($extractionMap, $hydrationMap);
+        $this->hydrationMap = $hydrationMap;
+        $this->extractionMap = $extractionMap;
+    }
+
     /**
      * {@inheritdoc}
      * @throws \InvalidArgumentException if $name is not defined in the map
      */
-    public function hydrate($name)
+    public function hydrate(string $name, ?array $data = null): string
     {
-        $hydratedName = parent::hydrate($name);
-        if ($hydratedName == $name) {
+        $hydratedName = $this->mapNamingStrategy->hydrate($name, $data);
+        if (
+            $hydratedName == $name and
+            !isset($this->extractionMap[$name]) and
+            !in_array($name, $this->hydrationMap)
+        ) {
             throw new \InvalidArgumentException('Unknown column name: ' . $name);
         }
         return $hydratedName;
@@ -46,9 +88,9 @@ class MapNamingStrategy extends \Zend\Stdlib\Hydrator\NamingStrategy\MapNamingSt
      * {@inheritdoc}
      * @throws \InvalidArgumentException if $name is not defined in the map
      */
-    public function extract($name)
+    public function extract(string $name, ?object $object = null): string
     {
-        $extractedName = parent::extract($name);
+        $extractedName = $this->mapNamingStrategy->extract($name, $object);
         if ($extractedName == $name) {
             throw new \InvalidArgumentException('Unknown property name: ' . $name);
         }
@@ -60,9 +102,9 @@ class MapNamingStrategy extends \Zend\Stdlib\Hydrator\NamingStrategy\MapNamingSt
      *
      * @return string[]
      */
-    public function getHydratorMap()
+    public function getHydrationMap(): array
     {
-        return $this->mapping;
+        return $this->hydrationMap;
     }
 
     /**
@@ -70,8 +112,8 @@ class MapNamingStrategy extends \Zend\Stdlib\Hydrator\NamingStrategy\MapNamingSt
      *
      * @return string[]
      */
-    public function getExtractorMap()
+    public function getExtractionMap(): array
     {
-        return $this->reverse;
+        return $this->extractionMap;
     }
 }

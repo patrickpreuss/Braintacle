@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Frontend for different archive file types
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,9 @@
  */
 
 namespace Library;
+
+use Throwable;
+use ZipArchive;
 
 /**
  * Frontend for different archive file types
@@ -79,7 +83,7 @@ class ArchiveManager
         $isArchive = false;
         switch ($type) {
             case self::ZIP:
-                $zip = new \ZipArchive;
+                $zip = new \ZipArchive();
                 if ($zip->open($filename) === true) {
                     $zip->close();
                     $isArchive = true;
@@ -95,9 +99,10 @@ class ArchiveManager
     /**
      * Create an archive file
      *
-     * Existing files will be overwritten. Depending on the underlying archive
-     * implementation, the archive may not be created on disk immediately, but
-     * only after successfully adding files and/or closing the archive.
+     * The archive file must not exist - delete existing archives before calling
+     * this method. Depending on the underlying archive implementation, the
+     * archive may not be created on disk immediately, but only after
+     * successfully adding files and/or closing the archive.
      *
      * @param string $type Archive type to create, one of the class constants
      * @param string $filename File to create
@@ -107,12 +112,23 @@ class ArchiveManager
      */
     public function createArchive($type, $filename)
     {
+        // ZipArchive::OVERWRITE gives strange errors on Windows if the target
+        // file exists. The only known workaround is to forbid an existing file.
+        if (file_exists($filename)) {
+            throw new \RuntimeException('Archive already exists: ' . $filename);
+        }
         switch ($type) {
             case self::ZIP:
-                $archive = new \ZipArchive;
-                $result = @$archive->open($filename, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
-                if ($result !== true) {
-                    throw new \RuntimeException("Error creating ZIP archive '$filename', code $result");
+                $archive = new \ZipArchive();
+                // open() may throw an error on PHP 8 while earlier versions
+                // return FALSE. Handle both cases uniformly.
+                try {
+                    $result = $archive->open($filename, \ZipArchive::CREATE | \ZipArchive::EXCL);
+                    if ($result !== true) {
+                        throw new \RuntimeException("Error creating ZIP archive '$filename', code $result");
+                    }
+                } catch (Throwable $t) {
+                    throw new \RuntimeException("Error creating ZIP archive '$filename', code $result", 0, $t);
                 }
                 break;
             default:
@@ -125,21 +141,22 @@ class ArchiveManager
     /**
      * Close an archive
      *
-     * @param \ZipArchive $archive Archive object
      * @param bool $ignoreErrors Don't throw an exception on error
      * @throws \InvalidArgumentException if $type is unknown
      * @throws \RuntimeException if an error occurs unless $ignoreErrors is TRUE
      */
-    public function closeArchive($archive, $ignoreErrors=false)
+    public function closeArchive(ZipArchive $archive, $ignoreErrors = false)
     {
-        if ($archive instanceof \ZipArchive) {
+        // close() may throw an error on PHP 8 while earlier versions return
+        // FALSE. Handle both cases uniformly.
+        try {
             if (!@$archive->close()) {
-                if (!$ignoreErrors) {
-                    throw new \RuntimeException('Error closing ZIP archive');
-                }
+                throw new \RuntimeException('Error closing ZIP archive');
             }
-        } else {
-            throw new \InvalidArgumentException('Unsupported archive');
+        } catch (Throwable $t) {
+            if (!$ignoreErrors) {
+                throw new \RuntimeException('Error closing ZIP archive', 0, $t);
+            }
         }
     }
 
@@ -151,20 +168,15 @@ class ArchiveManager
      * treatment of filenames is done. There is no guarantee that filenames with
      * problematic characters will work under all circumstances.
      *
-     * @param \ZipArchive $archive Archive object
      * @param string $file File to add
      * @param string $name Name/Path under which the file will be stored in the archive
      * @throws \InvalidArgumentException if $type is unknown
      * @throws \RuntimeException if an error occurs
      */
-    public function addFile($archive, $file, $name)
+    public function addFile(ZipArchive $archive, $file, $name)
     {
-        if ($archive instanceof \ZipArchive) {
-            if (!@$archive->addFile($file, $name)) {
-                throw new \RuntimeException("Error adding file '$file' to archive as '$name'");
-            }
-        } else {
-            throw new \InvalidArgumentException('Unsupported archive');
+        if (!@$archive->addFile($file, $name)) {
+            throw new \RuntimeException("Error adding file '$file' to archive as '$name'");
         }
     }
 }

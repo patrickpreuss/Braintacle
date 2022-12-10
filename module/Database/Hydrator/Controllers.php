@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator for controllers
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,48 +22,49 @@
 
 namespace Database\Hydrator;
 
+use Model\AbstractModel;
+
 /**
  * Hydrator for controllers
  *
  * Sanitizes incompatible structures produced by different agents.
  */
-class Controllers implements \Zend\Stdlib\Hydrator\HydratorInterface
+class Controllers implements \Laminas\Hydrator\HydratorInterface
 {
     /** {@inheritdoc} */
     public function hydrate(array $data, $object)
     {
-        $object->exchangeArray(array());
         if ($data['is_windows']) {
-            $object['Type'] = $data['type'];
-            $object['Name'] = $data['name'];
-            $object['Version'] = $data['version'];
-            $object['Manufacturer'] = $data['manufacturer'];
-            $object['Comment'] = $data['description'];
+            $object->Type = $data['type'];
+            $object->Name = $data['name'];
+            $object->Version = $data['version'];
+            $object->Manufacturer = $data['manufacturer'];
+            $object->Comment = $data['description'];
         } else {
-            $object['Type'] = $data['name'];
-            $object['Name'] = $data['manufacturer'];
-            $object['Version'] = $data['type'];
+            $object->Type = $data['name'];
+            $object->Name = $data['manufacturer'];
+            $object->Version = $data['type'];
         }
         return $object;
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
-        $data = array();
-        if (array_key_exists('Manufacturer', $object)) {
+        $data = [];
+        if ($object instanceof AbstractModel && $object->offsetExists('Manufacturer') || property_exists($object, 'manufacturer')) {
             // Windows
-            $data['type'] = $object['Type'];
-            $data['name'] = $object['Name'];
-            $data['manufacturer'] = $object['Manufacturer'];
-            $data['caption'] = $object['Name'];
-            $data['description'] = $object['Comment'];
-            $data['version'] = $object['Version'];
+            $data['type'] = $object->type;
+            $data['name'] = $object->name;
+            $data['manufacturer'] = $object->manufacturer;
+            $data['caption'] = $object->name;
+            $data['description'] = $object->comment;
+            $data['version'] = $object->version;
         } else {
             // UNIX
-            $data['type'] = $object['Version'];
-            $data['name'] = $object['Type'];
-            $data['manufacturer'] = $object['Name'];
+            $data['type'] = $object->version;
+            $data['name'] = $object->type;
+            $data['manufacturer'] = $object->name;
             $data['caption'] = null;
             $data['description'] = null;
             $data['version'] = null;

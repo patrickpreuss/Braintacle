@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Validate string to be a path to a readable file
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,13 +25,18 @@ namespace Library\Validator;
 /**
  * Validate string to be a path to a readable file
  */
-class FileReadable extends \Zend\Validator\AbstractValidator
+class FileReadable extends \Laminas\Validator\AbstractValidator
 {
+    /**
+     * Key for message template: not a file or inaccessible
+     */
     const FILE = 'file';
+
+    /**
+     * Key for message template: file not readable
+     */
     const READABLE = 'readable';
 
-
-    // @codingStandardsIgnoreStart
     /**
      * Validation failure message template definitions
      * @var string[]
@@ -39,10 +45,6 @@ class FileReadable extends \Zend\Validator\AbstractValidator
         self::FILE => "'%value%' is not a file or inaccessible",
         self::READABLE => "File '%value%' is not readable",
     );
-
-    /** {@inheritdoc} */
-    protected static $defaultTranslatorTextDomain = 'default';
-    // @codingStandardsIgnoreEnd
 
     /**
      * Returns true if $value is a file and readable

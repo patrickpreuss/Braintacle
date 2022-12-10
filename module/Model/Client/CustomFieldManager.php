@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Class for managing custom fields
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Model\Client;
+
+use InvalidArgumentException;
 
 /**
  * Class for managing custom fields
@@ -49,7 +52,7 @@ class CustomFieldManager
 
     /**
      * Hydrator for CustomField objects
-     * @var \Zend\Stdlib\Hydrator\ArraySerializable
+     * @var \Laminas\Hydrator\ArraySerializableHydrator
      */
     protected $_hydrator;
 
@@ -74,8 +77,7 @@ class CustomFieldManager
     public function __construct(
         \Database\Table\CustomFieldConfig $customFieldConfig,
         \Database\Table\CustomFields $customFields
-    )
-    {
+    ) {
         $this->_customFieldConfig = $customFieldConfig;
         $this->_customFields = $customFields;
     }
@@ -83,7 +85,7 @@ class CustomFieldManager
     /**
      * Populate field caches
      */
-    private function _getFieldInfo()
+    private function getFieldInfo()
     {
         $this->_fields = array();
         $this->_columnMap = array();
@@ -101,7 +103,7 @@ class CustomFieldManager
     public function getFields()
     {
         if (!($this->_fields)) {
-            $this->_getFieldInfo();
+            $this->getFieldInfo();
         }
         return $this->_fields;
     }
@@ -114,7 +116,7 @@ class CustomFieldManager
     public function getColumnMap()
     {
         if (!$this->_columnMap) {
-            $this->_getFieldInfo();
+            $this->getFieldInfo();
         }
         return $this->_columnMap;
     }
@@ -212,19 +214,19 @@ class CustomFieldManager
      * table class due to tricky dependencies. Use this method to get a suitable
      * hydrator.
      *
-     * @return \Zend\Stdlib\Hydrator\ArraySerializable
+     * @return \Laminas\Hydrator\ArraySerializableHydrator
      */
     public function getHydrator()
     {
         if (!$this->_hydrator) {
             $columns = $this->getColumnMap();
-            $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+            $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
             $this->_hydrator->setNamingStrategy(
                 new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
                     array_flip($columns)
                 )
             );
-            $dateStrategy = new \Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy('Y-m-d');
+            $dateStrategy = new \Laminas\Hydrator\Strategy\DateTimeFormatterStrategy('Y-m-d');
             foreach ($this->getFields() as $name => $type) {
                 if ($type == 'date') {
                     $this->_hydrator->addStrategy($name, $dateStrategy);
@@ -236,44 +238,49 @@ class CustomFieldManager
     }
 
     /**
-     * Get field content for given client
-     *
-     * @param integer $clientId Client ID
-     * @return \Model\Client\CustomFields
-     * @throws \InvalidArgumentException if client ID does not exist
+     * Get field content for given client.
      */
-    public function read($clientId)
+    public function read(int $clientId): CustomFields
     {
-        $fields = new \Model\Client\CustomFields;
-        $select = $this->_customFields->getSql()->select();
-        $select->columns(array_values($this->getColumnMap()))
-               ->where(array('hardware_id' => $clientId));
-        $data = $this->_customFields->selectWith($select)->current();
-        if (!$data) {
-            throw new \RuntimeException('Invalid client ID: ' . $clientId);
-        }
-        $this->getHydrator()->hydrate(
-            $data->getArrayCopy(),
-            $fields
-        );
-        return $fields;
+        $data = $this->readRaw($clientId, array_values($this->getColumnMap()));
+        $fields = new CustomFields();
+
+        return $this->getHydrator()->hydrate($data, $fields);
     }
 
     /**
-     * Set field content for given client
-     *
-     * @param integer $clientId Client ID
-     * @param array|\Model\Client\CustomFields $data Values
+     * Get raw field content for given client.
      */
-    public function write($clientId, $data)
+    public function readRaw(int $clientId, array $columns): array
     {
-        if (!$data instanceof \Model\Client\CustomFields) {
-            $data = new \Model\Client\CustomFields($data);
+        $select = $this->_customFields->getSql()->select();
+        $select->columns($columns)->where(['hardware_id' => $clientId]);
+
+        $result = $this->_customFields->selectWith($select)->current();
+        if (!$result) {
+            throw new InvalidArgumentException('Invalid client ID: ' . $clientId);
         }
+
+        return $result->getArrayCopy();
+    }
+
+    /**
+     * Set field content for given client.
+     */
+    public function write(int $clientId, $data): void
+    {
+        if (!$data instanceof CustomFields) {
+            $data = new CustomFields($data);
+        }
+        $this->writeRaw($clientId, $this->getHydrator()->extract($data));
+    }
+
+    /**
+     * Set raw field content for given client.
+     */
+    public function writeRaw(int $clientId, array $data): void
+    {
         // Row is always present (created by server)
-        $this->_customFields->update(
-            $this->getHydrator()->extract($data),
-            array('hardware_id' => $clientId)
-        );
+        $this->_customFields->update($data, ['hardware_id' => $clientId]);
     }
 }

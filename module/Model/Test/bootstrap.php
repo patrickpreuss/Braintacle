@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Bootstrap for unit tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,34 +20,18 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+namespace Model;
+
 error_reporting(-1);
 date_default_timezone_set('Europe/Berlin');
+\Locale::setDefault('de');
 
-/**
- * A minimal stream wrapper to simulate I/O errors
- *
- * Only url_stat() is (partially) implemented to simulate file properties.
- * Files cannot be actually opened.
- */
-class StreamWrapperStatOnly
-{
-    public function url_stat($path, $flags)
-    {
-        return array('size' => 42);
-    }
-}
-stream_wrapper_register('statonly', 'StreamWrapperStatOnly');
-
-require_once(__DIR__ . '/../../Library/Application.php');
-\Library\Application::init('Model', false);
-
-// Get absolute path to vfsStream library
-\Zend\Loader\AutoloaderFactory::factory(
+$serviceManager = \Library\Application::init('Model')->getServiceManager();
+$serviceManager->setService(
+    'Library\UserConfig',
     array(
-        '\Zend\Loader\StandardAutoloader' => array(
-            'namespaces' => array(
-                'org\bovigo\vfs' => stream_resolve_include_path('org/bovigo/vfs'),
-            ),
-        )
+        'database' => json_decode(getenv('BRAINTACLE_TEST_DATABASE'), true),
     )
 );
+\Model\Test\AbstractTest::$serviceManager = $serviceManager;
+unset($serviceManager);

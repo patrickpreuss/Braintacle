@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Abstract factory for hydrators
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Protocol\Service;
+namespace Protocol\Service;
 
 /**
  * Abstract factory for hydrators
@@ -30,27 +31,22 @@ Namespace Protocol\Service;
  *
  * @codeCoverageIgnore
  */
-class AbstractHydratorFactory implements \Zend\ServiceManager\AbstractFactoryInterface
+class AbstractHydratorFactory implements \Laminas\ServiceManager\Factory\AbstractFactoryInterface
 {
     /** {@inheritdoc} */
-    public function canCreateServiceWithName(
-        \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator,
-        $name,
-        $requestedName
-    )
+    public function canCreate(\Interop\Container\ContainerInterface $container, $requestedName)
     {
         return strpos($requestedName, 'Protocol\Hydrator\\') === 0;
     }
 
     /** {@inheritdoc} */
-    public function createServiceWithName(
-        \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator,
-        $name,
-        $requestedName
-    )
-    {
+    public function __invoke(
+        \Interop\Container\ContainerInterface $container,
+        $requestedName,
+        array $options = null
+    ) {
         return new \Protocol\Hydrator\DatabaseProxy(
-            clone $serviceLocator->get(
+            clone $container->get(
                 'Database\Table' . substr($requestedName, strrpos($requestedName, '\\'))
             )->getHydrator()
         );

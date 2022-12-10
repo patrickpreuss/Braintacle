@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for model tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,13 +22,15 @@
 
 namespace Model\Test;
 
+use PHPUnit\DbUnit\Database\Connection;
+
 /**
  * Base class for model tests
  *
  * Tables that are given in $_tables are automatically set up, the fixture is
  * loaded and the service is automatically tested.
  */
-abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
+abstract class AbstractTest extends \PHPUnit\DbUnit\TestCase
 {
     /**
      * Array of tables to set up (table class names without Database\Table prefix)
@@ -37,61 +40,101 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
 
     /**
      * Connection used by DbUnit
-     * @var \PHPUnit_Extensions_Database_DB_IDatabaseConnection
      */
-    private $_db;
+    private Connection $_db;
 
     /**
-     * Set up tables
+     * Service manager
+     * @var \Laminas\ServiceManager\ServiceManager
      */
-    public static function setUpBeforeClass()
+    public static $serviceManager;
+
+    public static function setUpBeforeClass(): void
     {
         foreach (static::$_tables as $table) {
-            \Library\Application::getService("Database\Table\\$table")->setSchema();
+            static::$serviceManager->get("Database\Table\\$table")->updateSchema(true);
         }
         parent::setUpBeforeClass();
     }
 
     /**
      * Get connection for DbUnit
-     * 
-     * @return \PHPUnit_Extensions_Database_DB_IDatabaseConnection
      */
-    public function getConnection()
+    public function getConnection(): Connection
     {
-        if (!$this->_db) {
-            $pdo = \Library\Application::getService('Db')->getDriver()->getConnection()->getResource();
+        if (!isset($this->_db)) {
+            $pdo = static::$serviceManager->get('Db')->getDriver()->getConnection()->getResource();
             $this->_db = $this->createDefaultDBConnection($pdo, ':memory:');
         }
         return $this->_db;
     }
- 
+
     /**
      * Set up fixture from data/Test/Classname.yaml
      *
-     * @return \PHPUnit_Extensions_Database_DataSet_IDataSet
+     * @return \PHPUnit\DbUnit\DataSet\IDataSet
      */
     public function getDataSet()
     {
-        return $this->_loadDataSet();
+        return $this->loadDataSet();
     }
 
     /**
      * Load dataset from data/Test/Classname[/$testName].yaml
      *
      * @param string $testName Test name. If NULL, the fixture dataset for the test class is loaded.
-     * @return \PHPUnit_Extensions_Database_DataSet_IDataSet
+     * @return \PHPUnit\DbUnit\DataSet\IDataSet
      */
-    protected function _loadDataSet($testName=null)
+    protected function loadDataSet($testName = null)
     {
-        $class = $this->_getClass();
+        $class = $this->getClass();
         $class = substr($class, strpos($class, '\\')); // Remove 'Model' prefix
         $file = str_replace('\\', '/', "data/Test$class");
         if ($testName) {
             $file .= "/$testName";
         }
-        return new \PHPUnit_Extensions_Database_DataSet_YamlDataSet(
+        return new \PHPUnit\DbUnit\DataSet\YamlDataSet(
             \Model\Module::getPath("$file.yaml")
+        );
+    }
+
+    /**
+     * Wrap dataset with platform specific boolean emulation for result comparison
+     *
+     * When comparing database query results with a dataset, boolean columns
+     * cannot be compared directly due to platform-specific implementations.
+     * This method returns a wrapper that replaces the given values for
+     * TRUE/FALSE with their platform-specific counterparts.
+     *
+     * Due to the ReplacementDataSet implementation, real booleans cannot be
+     * used in the source dataset.
+     *
+     * @param \PHPUnit\DbUnit\DataSet\IDataSet $dataSet Dataset to wrap
+     * @param mixed $falseValue FALSE value used in $dataset
+     * @param mixed $trueValue TRUE value used in $dataset
+     * @return \PHPUnit\DbUnit\DataSet\ReplacementDataSet
+     */
+    protected function getBooleanDataSetWrapper(
+        \PHPUnit\DbUnit\DataSet\IDataSet $dataSet,
+        $falseValue,
+        $trueValue
+    ) {
+        switch (static::$serviceManager->get('Db')->getPlatform()->getName()) {
+            case 'MySQL':
+                $falseReplacement = 0;
+                $trueReplacement = 1;
+                break;
+            case 'SQLite':
+                $falseReplacement = '0';
+                $trueReplacement = '1';
+                break;
+            default:
+                $falseReplacement = false;
+                $trueReplacement = true;
+        }
+        return new \PHPUnit\DbUnit\DataSet\ReplacementDataSet(
+            $dataSet,
+            array($falseValue => $falseReplacement, $trueValue => $trueReplacement)
         );
     }
 
@@ -100,7 +143,7 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
      *
      * @return string
      */
-    protected function _getClass()
+    protected function getClass()
     {
         // Derive model class from test class name (minus \Test namespace and 'Test' suffix)
         return substr(str_replace('\Test', '', get_class($this)), 0, -4);
@@ -116,27 +159,33 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
      *
      * @param array $overrideServices Optional associative array (name => instance) with services to override
      * @return object Model instance
+     * @deprecated Create instance by constructor, by pulling from the container, or as partial mock
      */
-    protected function _getModel(array $overrideServices=array())
+    protected function getModel(array $overrideServices = array())
     {
-        $serviceManager = \Library\Application::getService('ServiceManager');
-        if (!empty($overrideServices)) {
-            // Clone service manager to keep changes local.
-            $serviceManager = clone $serviceManager;
-            $serviceManager->setAllowOverride(true);
-            // Reset SM config. This will force a new instance of our model to
-            // be created with overriden services.
-            $module = $serviceManager->get('ModuleManager')->getModule('Model');
-            $config = new \Zend\ServiceManager\Config($module->getConfig()['service_manager']);
-            $config->configureServiceManager($serviceManager);
+        if (empty($overrideServices)) {
+            $serviceManager = static::$serviceManager;
+        } else {
+            // Create temporary service manager with identical configuration.
+            $config = static::$serviceManager->get('config');
+            $serviceManager = new \Laminas\ServiceManager\ServiceManager($config['service_manager']);
+            // Clone 'config' service
+            $serviceManager->setService('config', $config);
+            // If not explicitly overridden, copy database services to avoid
+            // expensive reconnect or table setup which has already been done.
+            if (!isset($overrideServices['Db'])) {
+                $serviceManager->setService('Db', static::$serviceManager->get('Db'));
+            }
+            if (!isset($overrideServices['Database\Nada'])) {
+                $serviceManager->setService('Database\Nada', static::$serviceManager->get('Database\Nada'));
+            }
             // Override specified services
             foreach ($overrideServices as $name => $service) {
                 $serviceManager->setService($name, $service);
             }
         }
-
-        $model = $serviceManager->get($this->_getClass());
-        return clone $model;
+        // Always build a new instance.
+        return $serviceManager->build($this->getClass());
     }
 
     /**
@@ -144,6 +193,6 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
      */
     public function testInterface()
     {
-        $this->assertInternalType('object', $this->_getModel());
+        $this->assertIsObject($this->getModel());
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * A group of clients
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,8 @@
 
 namespace Model\Group;
 
+use DateTimeInterface;
+
 /**
  * A group of clients
  *
@@ -28,21 +31,48 @@ namespace Model\Group;
  * become a member by manual assignment or automatically based on the result of
  * a query. It is also possible to unconditionally exclude a client from a group
  * regardless of query result.
- *
- * @property integer $Id primary key
- * @property string $Name Name
- * @property string $Description Description
- * @property \DateTime $CreationDate Timestamp of group creation
- * @property string $DynamicMembersSql SQL query for dynamic members, may be empty
- * @property \DateTime $CacheCreationDate Timestamp of last cache update
- * @property \DateTime $CacheExpirationDate Timestamp when cache will expire and get rebuilt
  */
 class Group extends \Model\ClientOrGroup
 {
+    /**
+     * Primary key
+     */
+    public int $Id;
+
+    /**
+     * Name
+     */
+    public string $Name;
+
+    /**
+     * Description
+     */
+    public string $Description;
+
+    /**
+     * Timestamp of group creation
+     */
+    public DateTimeInterface $CreationDate;
+
+    /**
+     * SQL query for dynamic members, may be empty
+     */
+    public string $DynamicMembersSql;
+
+    /**
+     * Timestamp of last cache update
+     */
+    public DateTimeInterface $CacheCreationDate;
+
+    /**
+     * Timestamp when cache will expire and get rebuilt
+     */
+    public DateTimeInterface $CacheExpirationDate;
+
     /** {@inheritdoc} */
     public function getDefaultConfig($option)
     {
-        $config = $this->serviceLocator->get('Model\Config');
+        $config = $this->_serviceLocator->get('Model\Config');
         if ($option == 'allowScan') {
             if ($config->scannersPerSubnet == 0) {
                 $value = 0;
@@ -75,7 +105,7 @@ class Group extends \Model\ClientOrGroup
     public function setMembersFromQuery($type, $filter, $search, $operator, $invert)
     {
         $id = $this['Id'];
-        $members = $this->serviceLocator->get('Model\Client\ClientManager')->getClients(
+        $members = $this->_serviceLocator->get('Model\Client\ClientManager')->getClients(
             array('Id'),
             null,
             null,
@@ -89,16 +119,16 @@ class Group extends \Model\ClientOrGroup
         );
 
         if ($type == \Model\Client\Client::MEMBERSHIP_AUTOMATIC) {
-            $numCols = count($members->getRawState(\Zend\Db\Sql\Select::COLUMNS));
-            foreach ($members->getRawState(\Zend\Db\Sql\Select::JOINS) as $join) {
+            $numCols = count($members->getRawState(\Laminas\Db\Sql\Select::COLUMNS));
+            foreach ($members->getRawState(\Laminas\Db\Sql\Select::JOINS) as $join) {
                 $numCols += count($join['columns']);
             }
             if ($numCols != 1) {
                 throw new \LogicException('Expected 1 column, got ' . $numCols);
             }
-            $sql = new \Zend\Db\Sql\Sql($this->serviceLocator->get('Db'));
+            $sql = new \Laminas\Db\Sql\Sql($this->_serviceLocator->get('Db'));
             $query = $sql->buildSqlString($members);
-            $this->serviceLocator->get('Database\Table\GroupInfo')->update(
+            $this->_serviceLocator->get('Database\Table\GroupInfo')->update(
                 array('request' => $query),
                 array('hardware_id' => $id)
             );
@@ -111,7 +141,7 @@ class Group extends \Model\ClientOrGroup
             }
             // Get list of existing memberships
             $existingMemberships = array();
-            $groupMemberships = $this->serviceLocator->get('Database\Table\GroupMemberships');
+            $groupMemberships = $this->_serviceLocator->get('Database\Table\GroupMemberships');
             $select = $groupMemberships->getSql()->select();
             $select->columns(array('hardware_id', 'static'))->where(array('group_id' => $id));
             foreach ($groupMemberships->selectWith($select) as $membership) {
@@ -156,13 +186,13 @@ class Group extends \Model\ClientOrGroup
      *
      * @param bool $force always rebuild cache, ignoring expiration time
      */
-    public function update($force=false)
+    public function update($force = false)
     {
         if (!$this['DynamicMembersSql']) {
             return; // Nothing to do if no SQL query is defined for this group
         }
 
-        $now = $this->serviceLocator->get('Library\Now');
+        $now = $this->_serviceLocator->get('Library\Now');
         // Do nothing if cache has not expired yet and update is not forced.
         if (!$force and $this['CacheExpirationDate'] > $now) {
             return;
@@ -172,10 +202,10 @@ class Group extends \Model\ClientOrGroup
             return; // Another process is currently updating this group.
         }
 
-        $clients = $this->serviceLocator->get('Database\Table\Clients');
-        $groupInfo = $this->serviceLocator->get('Database\Table\GroupInfo');
-        $groupMemberships = $this->serviceLocator->get('Database\Table\GroupMemberships');
-        $config = $this->serviceLocator->get('Model\Config');
+        $clients = $this->_serviceLocator->get('Database\Table\Clients');
+        $groupInfo = $this->_serviceLocator->get('Database\Table\GroupInfo');
+        $groupMemberships = $this->_serviceLocator->get('Database\Table\GroupMemberships');
+        $config = $this->_serviceLocator->get('Model\Config');
 
         // Remove dynamic memberships where client no longer meets the criteria
         $groupMemberships->delete(
@@ -195,13 +225,13 @@ class Group extends \Model\ClientOrGroup
         $select->columns(
             array(
                 'hardware_id' => 'id',
-                'group_id' => new \Zend\Db\Sql\Expression('?', $this['Id']),
-                'static' => new \Zend\Db\Sql\Literal(\Model\Client\Client::MEMBERSHIP_AUTOMATIC),
+                'group_id' => new \Laminas\Db\Sql\Expression('?', $this['Id']),
+                'static' => new \Laminas\Db\Sql\Literal(\Model\Client\Client::MEMBERSHIP_AUTOMATIC),
             )
         )->where(
             array(
                 "id IN ($this[DynamicMembersSql])",
-                new \Zend\Db\Sql\Predicate\NotIn('id', $subquery),
+                new \Laminas\Db\Sql\Predicate\NotIn('id', $subquery),
             )
         );
         $groupMemberships->insert($select);
@@ -211,8 +241,9 @@ class Group extends \Model\ClientOrGroup
         $minExpires->modify(
             sprintf(
                 '+%d seconds',
-                $this->serviceLocator->get('Library\Random')->getInteger(
-                    0, $config->groupCacheExpirationFuzz
+                $this->_serviceLocator->get('Library\Random')->getInteger(
+                    0,
+                    $config->groupCacheExpirationFuzz
                 )
             )
         );
@@ -237,9 +268,9 @@ class Group extends \Model\ClientOrGroup
      * @param string $direction one of [asc|desc]. Default: asc
      * @return string[]
      */
-    public function getPackages($direction='asc')
+    public function getPackages($direction = 'asc')
     {
-        $packages = $this->serviceLocator->get('Database\Table\Packages');
+        $packages = $this->_serviceLocator->get('Database\Table\Packages');
         $select = $packages->getSql()->select();
         $select->columns(array('name'))
                ->join('devices', 'ivalue = fileid', array())

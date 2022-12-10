@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for AbstractTable helper methods
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,10 +22,16 @@
 
 namespace Database\Test\Table;
 
+use Database\AbstractTable;
+use Laminas\Db\Sql\Select;
+use Laminas\Hydrator\AbstractHydrator;
+use Laminas\Hydrator\HydratorInterface;
+use PHPUnit\Framework\MockObject\MockObject;
+
 /**
  * Tests for AbstractTable helper methods
  */
-class AbstractTableTest extends \PHPUnit_Extensions_Database_TestCase
+class AbstractTableTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * Table class
@@ -33,100 +40,108 @@ class AbstractTableTest extends \PHPUnit_Extensions_Database_TestCase
     protected $_table;
 
     /**
-     * Connection used by DbUnit
-     * @var \PHPUnit_Extensions_Database_DB_IDatabaseConnection
+     * Select Mock
+     * @var MockObject|Select
      */
-    private $_db;
+    protected $_select;
 
-    public static function setUpBeforeClass()
+    public function setUp(): void
     {
-        $database = \Library\Application::getService('Database\Nada');
-        $database->createTable(
-            'test1',
-            array(
-                array('name' => 'col1', 'type' => 'varchar', 'length' => 10, 'notnull' => true),
-                array('name' => 'col2', 'type' => 'varchar', 'length' => 10, 'notnull' => true),
-            ),
-            'col1'
-        );
-        $database->createTable(
-            'test2',
-            array(
-                array('name' => 'col1', 'type' => 'varchar', 'length' => 10, 'notnull' => true),
-            ),
-            'col1'
-        );
-        parent::setUpBeforeClass();
-    }
+        // Set up mock objects for getCol()
 
-    public function setUp()
-    {
-        $this->_table = $this->getMockBuilder('Database\AbstractTable')
-                             ->disableOriginalConstructor()
-                             ->getMockForAbstractClass();
-        $adapter = new \ReflectionProperty('Database\AbstractTable', 'adapter');
-        $adapter->setAccessible(true);
-        $adapter->setValue($this->_table, \Library\Application::getService('Db'));
-        return parent::setUp();
-    }
+        $this->_select = $this->createMock('Laminas\Db\Sql\Select');
 
-    public function getConnection()
-    {
-        if (!$this->_db) {
-            $pdo = \Library\Application::getService('Db')->getDriver()->getConnection()->getResource();
-            $this->_db = $this->createDefaultDBConnection($pdo, ':memory:');
-        }
-        return $this->_db;
-    }
- 
-    public function getDataSet()
-    {
-        return new \PHPUnit_Extensions_Database_DataSet_YamlDataSet(
-            \Database\Module::getPath("data/Test/AbstractTable.yaml")
-        );
+        $sql = $this->createMock('Laminas\Db\Sql\Sql');
+        $sql->method('select')->willReturn($this->_select);
+
+        $this->_table = $this->createPartialMock(AbstractTable::class, ['getSql', 'selectWith']);
+        $this->_table->method('getSql')->willReturn($sql);
+
+        parent::setUp();
     }
 
     public function testGetHydrator()
     {
-        $hydrator = new \ReflectionProperty('Database\AbstractTable', '_hydrator');
-        $hydrator->setAccessible(true);
-        $hydrator->setValue($this->_table, 'the hydrator');
-        $this->assertEquals('the hydrator', $this->_table->getHydrator());
+        $hydrator = $this->createStub(HydratorInterface::class);
+        $property = new \ReflectionProperty('Database\AbstractTable', '_hydrator');
+        $property->setAccessible(true);
+        $property->setValue($this->_table, $hydrator);
+        $this->assertSame($hydrator, $this->_table->getHydrator());
+    }
+
+    public function testGetConnection()
+    {
+        $connection = $this->createMock('Laminas\Db\Adapter\Driver\ConnectionInterface');
+
+        $driver = $this->createMock('Laminas\Db\Adapter\Driver\DriverInterface');
+        $driver->method('getConnection')->willReturn($connection);
+
+        $adapter = $this->createMock('Laminas\Db\Adapter\AdapterInterface');
+        $adapter->method('getDriver')->willReturn($driver);
+
+        $table = $this->createPartialMock(AbstractTable::class, ['getAdapter']);
+        $table->method('getAdapter')->willReturn($adapter);
+
+        $this->assertSame($connection, $table->getConnection());
     }
 
     public function testFetchColWithData()
     {
-        $table = new \ReflectionProperty('Database\AbstractTable', 'table');
-        $table->setAccessible(true);
-        $table->setValue($this->_table, 'test1');
-        $this->_table->initialize();
-        $this->assertEquals(array('col2a', 'col2b'), $this->_table->fetchCol('col2'));
+        $this->_select->expects($this->once())->method('columns')->with(array('col'), false);
+        $this->_table->method('selectWith')->with($this->_select)->willReturn(
+            array(
+                array('col' => 'value1'),
+                array('col' => 'value2')
+            )
+        );
+
+        $this->assertEquals(array('value1', 'value2'), $this->_table->fetchCol('col'));
     }
 
-    public function testFetchColWithHydrator()
+    public function testFetchColWithAbstractHydrator()
     {
-        $table = new \ReflectionProperty('Database\AbstractTable', 'table');
-        $table->setAccessible(true);
-        $table->setValue($this->_table, 'test1');
+        $hydrator = $this->createMock(AbstractHydrator::class);
+        $hydrator->method('hydrateName')->with('col')->willReturn('hydrated');
 
-        $hydrator = $this->getMock('Zend\Stdlib\Hydrator\ArraySerializable');
-        $hydrator->expects($this->once())->method('hydrateName')->with('col2')->willReturn('name');
-        $hydrator->method('hydrate')->willReturn(array('name' => 'value'));
+        $resultSet = $this->createMock('Laminas\Db\ResultSet\HydratingResultSet');
+        $resultSet->method('getHydrator')->willReturn($hydrator);
+        $resultSet->method('valid')->willReturnOnConsecutiveCalls(true, true, false);
+        $resultSet->method('key')->willReturnOnConsecutiveCalls(0, 1);
+        $resultSet->method('current')->willReturnOnConsecutiveCalls(
+            array('hydrated' => 'value1'),
+            array('hydrated' => 'value2')
+        );
 
-        $resultSet = new \ReflectionProperty('Database\AbstractTable', 'resultSetPrototype');
-        $resultSet->setAccessible(true);
-        $resultSet->setValue($this->_table, new \Zend\Db\ResultSet\HydratingResultSet($hydrator));
+        $this->_select->expects($this->once())->method('columns')->with(array('col'), false);
+        $this->_table->method('selectWith')->with($this->_select)->willReturn($resultSet);
 
-        $this->_table->initialize();
-        $this->assertEquals(array('value', 'value'), $this->_table->fetchCol('col2'));
+        $this->assertEquals(array('value1', 'value2'), $this->_table->fetchCol('col'));
+    }
+
+    public function testFetchColWithOtherHydrator()
+    {
+        $hydrator = $this->createStub(HydratorInterface::class);
+
+        $resultSet = $this->createMock('Laminas\Db\ResultSet\HydratingResultSet');
+        $resultSet->method('getHydrator')->willReturn($hydrator);
+        $resultSet->method('valid')->willReturnOnConsecutiveCalls(true, true, false);
+        $resultSet->method('key')->willReturnOnConsecutiveCalls(0, 1);
+        $resultSet->method('current')->willReturnOnConsecutiveCalls(
+            array('col' => 'value1'),
+            array('col' => 'value2')
+        );
+
+        $this->_select->expects($this->once())->method('columns')->with(array('col'), false);
+        $this->_table->method('selectWith')->with($this->_select)->willReturn($resultSet);
+
+        $this->assertEquals(array('value1', 'value2'), $this->_table->fetchCol('col'));
     }
 
     public function testFetchColWithEmptyTable()
     {
-        $table = new \ReflectionProperty('Database\AbstractTable', 'table');
-        $table->setAccessible(true);
-        $table->setValue($this->_table, 'test2');
-        $this->_table->initialize();
-        $this->assertSame(array(), $this->_table->fetchCol('col1'));
+        $this->_select->expects($this->once())->method('columns')->with(array('col'), false);
+        $this->_table->method('selectWith')->with($this->_select)->willReturn(array());
+
+        $this->assertSame(array(), $this->_table->fetchCol('col'));
     }
 }

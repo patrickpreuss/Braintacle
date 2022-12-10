@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the GroupInfo table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,51 +22,48 @@
 
 namespace Database\Test\Table;
 
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Model\Config;
+use PHPUnit\Framework\MockObject\Stub;
+
 class GroupInfoTest extends AbstractTest
 {
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         // GroupInfo initialization depends on Config table
-        $config = \Library\Application::getService('Database\Table\Config');
-        $config->setSchema();
+        static::$serviceManager->get('Database\Table\Config')->updateSchema(true);
         parent::setUpBeforeClass();
     }
 
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testHydrator()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $nada = $this->createStub(\Nada\Database\AbstractDatabase::class);
+        $nada->method('timestampFormatPhp')->willReturn(DATE_ATOM);
+
+        $config = $this->createMock(Config::class);
         $config->expects($this->once())->method('__get')->with('groupCacheExpirationInterval')->willReturn(42);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array(
-                        'Database\Nada',
-                        true,
-                        $this->getMockBuilder('Nada_Database')->disableOriginalConstructor()->getMock()
-                    ),
-                    array(
-                        'Db',
-                        true,
-                        $this->getMockBuilder('Zend\Db\Adapter\Adapter')->disableOriginalConstructor()->getMock()
-                    ),
-                    array('Model\Config', true, $config),
-                    array('Model\Group\Group', true, new \Model\Group\Group),
-                )
-            )
+            $this->returnValueMap([
+                ['Database\Nada', $nada],
+                ['Db', $this->createMock('Laminas\Db\Adapter\Adapter')],
+                ['Model\Config', $config],
+                ['Model\Group\Group', new \Model\Group\Group()],
+            ])
         );
 
         $table = new \Database\Table\GroupInfo($serviceManager);
         $table->initialize();
 
         $hydrator = $table->getHydrator();
-        $this->assertInstanceOf('Zend\Stdlib\Hydrator\ArraySerializable', $hydrator);
+        $this->assertInstanceOf(\Laminas\Hydrator\ArraySerializableHydrator::class, $hydrator);
 
         $map = $hydrator->getNamingStrategy();
         $this->assertInstanceOf('Database\Hydrator\NamingStrategy\MapNamingStrategy', $map);
@@ -88,7 +86,7 @@ class GroupInfoTest extends AbstractTest
 
         $dateTimeFormatterStrategy = $hydrator->getStrategy('CreationDate');
         $this->assertInstanceOf(
-            'Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy',
+            'Laminas\Hydrator\Strategy\DateTimeFormatterStrategy',
             $dateTimeFormatterStrategy
         );
         $this->assertSame($dateTimeFormatterStrategy, $hydrator->getStrategy('lastdate'));
@@ -104,7 +102,7 @@ class GroupInfoTest extends AbstractTest
         $this->assertEquals(42, $cacheExpirationDateStrategy->offset);
 
         $resultSet = $table->getResultSetPrototype();
-        $this->assertInstanceOf('Zend\Db\ResultSet\HydratingResultSet', $resultSet);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\HydratingResultSet', $resultSet);
         $this->assertSame($hydrator, $resultSet->getHydrator());
         $this->assertInstanceOf('Model\Group\Group', $resultSet->getObjectPrototype());
     }

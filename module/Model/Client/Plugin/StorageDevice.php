@@ -1,8 +1,9 @@
 <?php
+
 /**
  * StorageDevice item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,7 +25,7 @@ namespace Model\Client\Plugin;
 /**
  * StorageDevice item plugin
  */
-class StorageDevice extends AddIsWindows
+class StorageDevice extends AddOsColumns
 {
     /** {@inheritdoc} */
     public function columns()
@@ -40,12 +41,12 @@ class StorageDevice extends AddIsWindows
                 'disksize',
                 'serialnumber',
                 'firmware',
+                'is_android' => $this->getIsAndroidExpression(),
             )
         );
     }
 
-    /** {@inheritdoc} */
-    public function order($order, $direction)
+    public function order(?string $order, string $direction): void
     {
         // All properties may map to different columns depending on agent type.
         // There is no column that contains the same information for all agents.

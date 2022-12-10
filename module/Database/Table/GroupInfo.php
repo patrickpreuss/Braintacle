@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "groups" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "groups" table
@@ -30,7 +31,7 @@ class GroupInfo extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'groups';
         // Hydrator and ResultSet initialization is postponed to initialize()
@@ -43,7 +44,7 @@ class GroupInfo extends \Database\AbstractTable
     /** {@inheritdoc} */
     public function initialize()
     {
-        $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $this->_hydrator->setNamingStrategy(
             new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
                 array(
@@ -58,13 +59,13 @@ class GroupInfo extends \Database\AbstractTable
             )
         );
 
-        $dateTimeFormatter = new \Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy(
+        $dateTimeFormatter = new \Laminas\Hydrator\Strategy\DateTimeFormatterStrategy(
             $this->_serviceLocator->get('Database\Nada')->timestampFormatPhp()
         );
         $this->_hydrator->addStrategy('CreationDate', $dateTimeFormatter);
         $this->_hydrator->addStrategy('lastdate', $dateTimeFormatter);
 
-        $cacheCreationDateStrategy = new \Database\Hydrator\Strategy\Groups\CacheDate;
+        $cacheCreationDateStrategy = new \Database\Hydrator\Strategy\Groups\CacheDate();
         $this->_hydrator->addStrategy('CacheCreationDate', $cacheCreationDateStrategy);
         $this->_hydrator->addStrategy('create_time', $cacheCreationDateStrategy);
 
@@ -74,10 +75,11 @@ class GroupInfo extends \Database\AbstractTable
         $this->_hydrator->addStrategy('CacheExpirationDate', $cacheExpirationDateStrategy);
         $this->_hydrator->addStrategy('revalidate_from', $cacheExpirationDateStrategy);
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
             $this->_hydrator,
             $this->_serviceLocator->get('Model\Group\Group')
         );
-        return parent::initialize();
+
+        parent::initialize();
     }
 }

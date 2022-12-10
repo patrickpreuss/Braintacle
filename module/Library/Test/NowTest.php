@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Library\Now service
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,11 +22,13 @@
 
 namespace Library\Test;
 
-class NowTest extends \PHPUnit_Framework_TestCase
+class NowTest extends \PHPUnit\Framework\TestCase
 {
     public function testService()
     {
-        $serviceManager = \Library\Application::getService('serviceManager');
+        $application = \Library\Application::init('Library');
+        $serviceManager = $application->getServiceManager();
+
         // Service must not be shared so that a different result is returned
         // each time.
         $now1 = $serviceManager->get('Library\Now');

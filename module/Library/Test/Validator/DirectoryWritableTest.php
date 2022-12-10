@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for DirectoryWritable validator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -22,9 +23,9 @@
 namespace Library\Test\Validator;
 
 use Library\Validator\DirectoryWritable;
-use \org\bovigo\vfs\vfsStream;
+use org\bovigo\vfs\vfsStream;
 
-class DirectoryWritableTest extends \PHPUnit_Framework_TestCase
+class DirectoryWritableTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * vfsStream root container
@@ -32,7 +33,7 @@ class DirectoryWritableTest extends \PHPUnit_Framework_TestCase
      */
     protected $_root;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->_root = vfsStream::setup('root');
     }
@@ -40,17 +41,17 @@ class DirectoryWritableTest extends \PHPUnit_Framework_TestCase
     public function testDirectoryWritable()
     {
         $url = vfsStream::newDirectory('test', 0777)->at($this->_root)->url();
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertTrue($validator->isValid($url));
     }
 
     public function testDirectoryReadOnly()
     {
         $url = vfsStream::newDirectory('test', 0000)->at($this->_root)->url();
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertFalse($validator->isValid($url));
         $this->assertEquals(
-            array(DirectoryWritable::WRITABLE => "Verzeichnis '$url' ist nicht schreibbar"),
+            array(DirectoryWritable::WRITABLE => "Directory '$url' is not writable"),
             $validator->getMessages()
         );
     }
@@ -58,43 +59,42 @@ class DirectoryWritableTest extends \PHPUnit_Framework_TestCase
     public function testFileWritable()
     {
         $url = vfsStream::newFile('test', 0777)->at($this->_root)->url();
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(DirectoryWritable::DIRECTORY => "'$url' ist kein Verzeichnis oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(DirectoryWritable::DIRECTORY, key($validator->getMessages()));
     }
 
     public function testFileReadOnly()
     {
         $url = vfsStream::newFile('test', 0000)->at($this->_root)->url();
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(DirectoryWritable::DIRECTORY => "'$url' ist kein Verzeichnis oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(DirectoryWritable::DIRECTORY, key($validator->getMessages()));
     }
 
     public function testNonExistent()
     {
         $url = $this->_root->url() . '/test';
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertFalse($validator->isValid($url));
-        $this->assertEquals(
-            array(DirectoryWritable::DIRECTORY => "'$url' ist kein Verzeichnis oder nicht zugänglich"),
-            $validator->getMessages()
-        );
+        $this->assertEquals(DirectoryWritable::DIRECTORY, key($validator->getMessages()));
     }
 
     public function testEmpty()
     {
         $url = '';
-        $validator = new DirectoryWritable;
+        $validator = new DirectoryWritable();
         $this->assertFalse($validator->isValid($url));
+        $this->assertEquals(DirectoryWritable::DIRECTORY, key($validator->getMessages()));
+    }
+
+    public function testDirectoryMessage()
+    {
+        $url = $this->_root->url() . '/test';
+        $validator = new DirectoryWritable();
+        $validator->isValid($url);
         $this->assertEquals(
-            array(DirectoryWritable::DIRECTORY => "'$url' ist kein Verzeichnis oder nicht zugänglich"),
+            array(DirectoryWritable::DIRECTORY => "'$url' is not a directory or inaccessible"),
             $validator->getMessages()
         );
     }

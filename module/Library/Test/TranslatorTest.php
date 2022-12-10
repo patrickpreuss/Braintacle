@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Translator setup
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,65 +25,103 @@ namespace Library\Test;
 /**
  * Tests for the Translator setup
  */
-class TranslatorTest extends \PHPUnit_Framework_TestCase
+class TranslatorTest extends \PHPUnit\Framework\TestCase
 {
-    public function testMissingTranslationTriggersNotineInDevelopmentMode()
+    protected static $_defaultLocale;
+
+    public static function setUpBeforeClass(): void
     {
-        // Repeat application initialization with production environment
-        putenv('APPLICATION_ENV=production');
-        \Library\Application::init('Library', false);
-
-        // Invoke translator with untranslatable string - must not trigger notice
-        $translator = \Library\Application::getService('MvcTranslator')->getTranslator();
-        $message = $translator->translate('this_string_is_not_translated');
-
-        // Reset application state ASAP.
-        putenv('APPLICATION_ENV=test');
-        \Library\Application::init('Library', false);
-
-        $this->assertEquals('this_string_is_not_translated', $message);
-
-        // Repeat test - must trigger notice this time
-        @trigger_error(''); // Bring error_get_last() into defined state
-        $translator = \Library\Application::getService('MvcTranslator')->getTranslator();
-        $message = @$translator->translate('this_string_is_not_translated');
-        $lastError = error_get_last();
-        $this->assertEquals(E_USER_NOTICE, $lastError['type']);
-        $this->assertEquals(
-            'Missing translation: this_string_is_not_translated',
-            $lastError['message']
-        );
-        $this->assertEquals('this_string_is_not_translated', $message);
+        // Preserve global state
+        static::$_defaultLocale = \Locale::getDefault();
     }
 
-    public function testNoTranslatorForEnglishLocale()
+    public function tearDown(): void
     {
-        // Preserve state
-        if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
-            $language = $_SERVER['HTTP_ACCEPT_LANGUAGE'];
-        }
-        // Repeat application initialization with english locale
-        $_SERVER['HTTP_ACCEPT_LANGUAGE'] = 'en_UK';
-        \Library\Application::init('Library', false);
+        // Reset after every test to avoid interference
+        \Locale::setDefault(static::$_defaultLocale);
+    }
 
-        // Invoke translator with untranslatable string - must not trigger notice
-        $translator = \Library\Application::getService('MvcTranslator')->getTranslator();
-        $message = $translator->translate('this_string_is_not_translated');
+    public function translatorSetupProvider()
+    {
+        return array(
+            // Messages from Library module
+            array('en', "File '%value%' is not readable", "File '%value%' is not readable"),
+            array('en_UK', "File '%value%' is not readable", "File '%value%' is not readable"),
+            array('de', "File '%value%' is not readable", "Datei '%value%' ist nicht lesbar"),
+            array('de_DE', "File '%value%' is not readable", "Datei '%value%' ist nicht lesbar"),
+            // Messages from Laminas resources
+            array('en', "Value is required and can't be empty", "Value is required and can't be empty"),
+            array('en_UK', "Value is required and can't be empty", "Value is required and can't be empty"),
+            array('de', "Value is required and can't be empty", 'Es wird eine Eingabe benötigt'),
+            array('de_DE', "Value is required and can't be empty", 'Es wird eine Eingabe benötigt'),
+        );
+    }
 
-        // Reset application state ASAP.
-        if (isset($language)) {
-            $_SERVER['HTTP_ACCEPT_LANGUAGE'] = $language;
-        } else {
-            unset($_SERVER['HTTP_ACCEPT_LANGUAGE']);
-        }
-        \Library\Application::init('Library', false);
+    /**
+     * @dataProvider translatorSetupProvider
+     */
+    public function testTranslatorSetup($locale, $message, $expectedMessage)
+    {
+        \Locale::setDefault($locale);
+        $serviceManager = \Library\Application::init('Library')->getServiceManager();
+        $serviceManager->setService('Library\UserConfig', array());
+        $translator = $serviceManager->get('MvcTranslator');
+        $this->assertEquals($expectedMessage, $translator->translate($message));
+    }
 
-        $this->assertEquals('this_string_is_not_translated', $message);
+    public function missingTranslationProvider()
+    {
+        return array(
+            array('de'),
+            array('de_DE'),
+        );
+    }
 
-        // No translations should be loaded
-        $reflectionObject = new \ReflectionObject($translator);
-        $reflectionProperty = $reflectionObject->getProperty('files');
-        $reflectionProperty->setAccessible(true);
-        $this->assertSame(array(), $reflectionProperty->getValue($translator));
+    /**
+     * @dataProvider missingTranslationProvider
+     */
+    public function testMissingTranslationTriggersNoticeWhenEnabled($locale)
+    {
+        $this->expectNotice();
+        $this->expectNoticeMessage('Missing translation: this_string_is_not_translated');
+        \Locale::setDefault($locale);
+        $serviceManager = \Library\Application::init('Library')->getServiceManager();
+        $serviceManager->setService(
+            'Library\UserConfig',
+            array(
+                'debug' => array('report missing translations' => true),
+            )
+        );
+        $translator = $serviceManager->get('MvcTranslator');
+        $this->assertEquals('this_string_is_not_translated', $translator->translate('this_string_is_not_translated'));
+    }
+
+    /**
+     * @dataProvider missingTranslationProvider
+     */
+    public function testMissingTranslationDoesNotTriggerNoticeWhenDisabled($locale)
+    {
+        \Locale::setDefault($locale);
+        $serviceManager = \Library\Application::init('Library')->getServiceManager();
+        $serviceManager->setService(
+            'Library\UserConfig',
+            array(
+                'debug' => array('report missing translations' => false),
+            )
+        );
+        $translator = $serviceManager->get('MvcTranslator');
+        $this->assertEquals('this_string_is_not_translated', $translator->translate('this_string_is_not_translated'));
+    }
+
+    /**
+     * @dataProvider missingTranslationProvider
+     */
+    public function testMissingTranslationDoesNotTriggerNoticebyDefault($locale)
+    {
+        \Locale::setDefault($locale);
+        $serviceManager = \Library\Application::init('Library')->getServiceManager();
+        $serviceManager->setService('Library\UserConfig', array());
+        $translator = $serviceManager->get('MvcTranslator');
+        $this->assertEquals('this_string_is_not_translated', $translator->translate('this_string_is_not_translated'));
     }
 }

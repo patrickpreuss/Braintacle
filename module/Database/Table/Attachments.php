@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "temp_files" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "temp_files" table
@@ -40,7 +41,7 @@ class Attachments extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'temp_files';
         parent::__construct($serviceLocator);
@@ -50,13 +51,13 @@ class Attachments extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _preSetSchema($logger, $schema, $database)
+    protected function preSetSchema($logger, $schema, $database, $prune)
     {
         if (in_array($this->table, $database->getTableNames())) {
             $count = $this->delete(
                 array(
-                    new \Zend\Db\Sql\Predicate\Operator('table_name', '!=', self::OBJECT_TYPE_CLIENT),
-                    new \Zend\Db\Sql\Predicate\Operator('table_name', '!=', self::OBJECT_TYPE_SNMP),
+                    new \Laminas\Db\Sql\Predicate\Operator('table_name', '!=', self::OBJECT_TYPE_CLIENT),
+                    new \Laminas\Db\Sql\Predicate\Operator('table_name', '!=', self::OBJECT_TYPE_SNMP),
                 )
             );
             if ($count) {

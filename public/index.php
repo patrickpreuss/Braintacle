@@ -1,8 +1,9 @@
 <?php
+
 /**
  * All interaction with the user agent starts with this script.
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,17 +20,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Set up PHP environment. The error configuration is done as early as possible.
 error_reporting(-1);
+session_cache_limiter('nocache'); // Default headers to prevent caching
 
-require_once('../module/Library/Application.php');
+require_once('../vendor/autoload.php');
 
-if (\Library\Application::isProduction()) {
-    ini_set('display_errors', false);
-    ini_set('display_startup_errors', false);
-} else {
-    ini_set('display_errors', true);
-    ini_set('display_startup_errors', true);
-}
-
-\Library\Application::init('Console');
+\Library\Application::init('Console')->run();

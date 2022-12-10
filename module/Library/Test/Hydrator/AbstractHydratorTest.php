@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Abstract test class for hydrators
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,32 +22,63 @@
 
 namespace Library\Test\Hydrator;
 
-abstract class AbstractHydratorTest extends \PHPUnit_Framework_TestCase
+use Model\AbstractModel;
+use stdClass;
+
+abstract class AbstractHydratorTest extends \PHPUnit\Framework\TestCase
 {
-    protected function _getHydrator()
+    protected function getHydrator()
     {
         $class = preg_replace('/Test\\\\?/', '', get_class($this));
-        return new $class;
+        return new $class();
     }
 
     /**
      * @dataProvider hydrateProvider
      */
-    public function testHydrate(array $data, array $objectData)
+    public function testHydrateWithStdClass(array $data, array $objectData)
     {
-        $hydrator = $this->_getHydrator();
-        $object = new \ArrayObject;
+        $hydrator = $this->getHydrator();
+        $object = new stdClass();
         $this->assertSame($object, $hydrator->hydrate($data, $object));
-        $this->assertEquals($objectData, $object->getArrayCopy());
+        $this->assertEquals($objectData, get_object_vars($object));
+    }
+
+    /**
+     * @dataProvider hydrateProvider
+     */
+    public function testHydrateWithAbstractModel(array $data, array $objectData)
+    {
+        $hydrator = $this->getHydrator();
+        $object = $this->getMockForAbstractClass(AbstractModel::class);
+        $this->assertSame($object, $hydrator->hydrate($data, $object));
+        $expected = [];
+        foreach ($objectData as $key => $value) {
+            $expected[ucfirst($key)] = $value;
+        }
+        $this->assertEquals($expected, $object->getArrayCopy());
     }
 
     /**
      * @dataProvider extractProvider
      */
-    public function testExtract(array $objectData, array $data)
+    public function testExtractWithStdClass(array $objectData, array $data)
     {
-        $hydrator = $this->_getHydrator();
-        $object = new \ArrayObject($objectData);
+        $hydrator = $this->getHydrator();
+        $object = (object) $objectData;
+        $this->assertEquals($data, $hydrator->extract($object));
+    }
+
+    /**
+     * @dataProvider extractProvider
+     */
+    public function testExtractWithAbstractModel(array $objectData, array $data)
+    {
+        $hydrator = $this->getHydrator();
+        $object = $this->getMockForAbstractClass(AbstractModel::class);
+        foreach ($objectData as $key => $value) {
+            $object->$key = $value;
+        }
         $this->assertEquals($data, $hydrator->extract($object));
     }
 }

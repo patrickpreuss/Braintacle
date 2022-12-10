@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Bootstrap for unit tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -22,5 +23,4 @@
 error_reporting(-1);
 date_default_timezone_set('Europe/Berlin');
 
-require_once(__DIR__ . '/../../Library/Application.php');
-\Library\Application::init('Protocol', false);
+\Library\Application::init('Protocol');

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * The Protocol module
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,7 +22,12 @@
 
 namespace Protocol;
 
-use Zend\ModuleManager\Feature;
+use Laminas\Di\Container\ServiceManager\AutowireFactory;
+use Laminas\ModuleManager\Feature;
+use Protocol\Hydrator\ClientsBios;
+use Protocol\Hydrator\ClientsHardware;
+use Protocol\Hydrator\Filesystems;
+use Protocol\Hydrator\Software;
 
 /**
  * The Protocol module
@@ -31,53 +37,41 @@ use Zend\ModuleManager\Feature;
  * @codeCoverageIgnore
  */
 class Module implements
-Feature\AutoloaderProviderInterface,
-Feature\ConfigProviderInterface,
-Feature\InitProviderInterface
+    Feature\ConfigProviderInterface,
+    Feature\InitProviderInterface
 {
-    /**
-     * @internal
-     */
-    public function init(\Zend\ModuleManager\ModuleManagerInterface $manager)
+    /** {@inheritdoc} */
+    public function init(\Laminas\ModuleManager\ModuleManagerInterface $manager)
     {
         $manager->loadModule('Database');
         $manager->loadModule('Library');
         $manager->loadModule('Model');
     }
 
-    /**
-     * @internal
-     */
+    /** {@inheritdoc} */
     public function getConfig()
     {
         return array(
+            'filters' => array(
+                'aliases' => array(
+                    'Protocol\InventoryDecode' => 'Protocol\Filter\InventoryDecode',
+                ),
+            ),
             'service_manager' => array(
                 'abstract_factories' => array(
                     'Protocol\Service\AbstractHydratorFactory',
                 ),
-                'factories' => array(
-                    'Protocol\Hydrator\ClientsHardware' => 'Protocol\Service\Hydrator\ClientsHardwareFactory',
-                ),
-                'invokables' => array(
-                    'Protocol\Hydrator\ClientsBios' => 'Protocol\Hydrator\ClientsBios',
-                    'Protocol\Hydrator\Filesystems' => 'Protocol\Hydrator\Filesystems',
-                    'Protocol\Hydrator\Software' => 'Protocol\Hydrator\Software',
-                    'Protocol\Message\InventoryRequest' => 'Protocol\Message\InventoryRequest',
-                ),
-            ),
-        );
-    }
-
-    /**
-     * @internal
-     */
-    public function getAutoloaderConfig()
-    {
-        return array(
-            'Zend\Loader\StandardAutoloader' => array(
-                'namespaces' => array(
-                    __NAMESPACE__ => __DIR__,
-                ),
+                'factories' => [
+                    // Declare factories explicitly where AbstractHydratorFactory is unsuitable.
+                    ClientsBios::class => AutowireFactory::class,
+                    ClientsHardware::class => AutowireFactory::class,
+                    Filesystems::class => AutowireFactory::class,
+                    Software::class => AutowireFactory::class,
+                ],
+                'shared' => [
+                    'Protocol\Message\InventoryRequest' => false,
+                    'Protocol\Message\InventoryRequest\Content' => false,
+                ],
             ),
         );
     }
@@ -88,7 +82,7 @@ Feature\InitProviderInterface
      * @param string $path Optional path component that is appended to the module root path
      * @return string Absolute path to requested file/directory (directories without trailing slash)
      */
-    public static function getPath($path='')
+    public static function getPath($path = '')
     {
         return \Library\Application::getPath('module/Protocol/' . $path);
     }

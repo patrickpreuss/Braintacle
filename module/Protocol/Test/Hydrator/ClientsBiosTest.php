@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for ClientsBios hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,8 @@
 
 namespace Protocol\Test\Hydrator;
 
+use Model\AbstractModel;
+
 class ClientsBiosTest extends \Library\Test\Hydrator\AbstractHydratorTest
 {
     protected $_extracted = array(
@@ -34,25 +37,17 @@ class ClientsBiosTest extends \Library\Test\Hydrator\AbstractHydratorTest
         'TYPE' => 'type',
     );
 
-    protected $_hydrated = array(
-        'AssetTag' => 'asset tag',
-        'BiosDate' => 'bios date',
-        'BiosManufacturer' => 'bios manufacturer',
-        'BiosVersion' => 'bios version',
-        'Manufacturer' => 'manufacturer',
-        'Model' => 'model',
-        'Serial' => 'serial',
-        'Type' => 'type',
-        'ClientId' => 'ignored',
-    );
-
-    public function testService()
-    {
-        $this->assertInstanceOf(
-            'Protocol\Hydrator\ClientsBios',
-            \Library\Application::getService('Protocol\Hydrator\ClientsBios')
-        );
-    }
+    protected $_hydrated = [
+        'assetTag' => 'asset tag',
+        'biosDate' => 'bios date',
+        'biosManufacturer' => 'bios manufacturer',
+        'biosVersion' => 'bios version',
+        'manufacturer' => 'manufacturer',
+        'model' => 'model',
+        'serial' => 'serial',
+        'type' => 'type',
+        'idString' => 'ignored',
+    ];
 
     public function hydrateProvider()
     {
@@ -62,13 +57,29 @@ class ClientsBiosTest extends \Library\Test\Hydrator\AbstractHydratorTest
     /**
      * @dataProvider hydrateProvider
      */
-    public function testHydrate(array $data, array $objectData)
+    public function testHydrateWithStdClass(array $data, array $objectData)
     {
-        $hydrator = $this->_getHydrator();
-        $object = new \ArrayObject;
-        $object['ClientId'] = 'ignored';
+        $hydrator = $this->getHydrator();
+        $object = (object) $objectData;
+        $object->idString = 'ignored';
         $this->assertSame($object, $hydrator->hydrate($data, $object));
-        $this->assertEquals($objectData, $object->getArrayCopy());
+        $this->assertEquals($objectData, get_object_vars($object));
+    }
+
+    /**
+     * @dataProvider hydrateProvider
+     */
+    public function testHydrateWithAbstractModel(array $data, array $objectData)
+    {
+        $hydrator = $this->getHydrator();
+        $object = $this->getMockForAbstractClass(AbstractModel::class);
+        $object->idString = 'ignored';
+        $this->assertSame($object, $hydrator->hydrate($data, $object));
+        $expected = [];
+        foreach ($objectData as $key => $value) {
+            $expected[ucfirst($key)] = $value;
+        }
+        $this->assertEquals($expected, $object->getArrayCopy());
     }
 
     public function extractProvider()

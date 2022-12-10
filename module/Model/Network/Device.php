@@ -1,8 +1,9 @@
 <?php
+
 /**
  * A network device (router, printer, uninventoried workstation etc.)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -31,6 +32,6 @@ namespace Model\Network;
  * @property string $Description Description (only identified devices)
  * @property string $Type Type (only identified devices)
  */
-class Device extends \ArrayObject
+class Device extends \Model\AbstractModel
 {
 }

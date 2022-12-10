@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Po class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,13 +25,13 @@ namespace Library\Test\I18n\Translator\Loader;
 /**
  * Tests for the Po class
  */
-class PoTest extends \PHPUnit_Framework_TestCase
+class PoTest extends \PHPUnit\Framework\TestCase
 {
     public function testLoad()
     {
-        $loader = new \Library\I18n\Translator\Loader\Po;
+        $loader = new \Library\I18n\Translator\Loader\Po();
         $textDomain = $loader->load('de', \Library\Module::getPath('data/Test/I18n/Translator/Loader/PoTest.po'));
-        $this->assertInstanceOf('Zend\I18n\Translator\TextDomain', $textDomain);
+        $this->assertInstanceOf('Laminas\I18n\Translator\TextDomain', $textDomain);
         $translations = array(
             'single2single' => 'single to single',
             'single2multi' => 'single to multi',

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator for extension slots
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,42 +22,43 @@
 
 namespace Database\Hydrator;
 
+use Model\AbstractModel;
+
 /**
  * Hydrator for extension slots
  *
  * Sanitizes incompatible structures produced by different agents.
  */
-class ExtensionSlots implements \Zend\Stdlib\Hydrator\HydratorInterface
+class ExtensionSlots implements \Laminas\Hydrator\HydratorInterface
 {
     /** {@inheritdoc} */
     public function hydrate(array $data, $object)
     {
-        $object->exchangeArray(array());
         if ($data['is_windows']) {
-            $object['Name'] = $data['designation'];
-            $object['Status'] = ($data['purpose'] ?: $data['status']);
+            $object->Name = $data['designation'];
+            $object->Status = ($data['purpose'] ?: $data['status']);
         } else {
-            $object['Name'] = $data['name'];
-            $object['Status'] = $data['status'];
-            $object['SlotId'] = $data['designation'];
+            $object->Name = $data['name'];
+            $object->Status = $data['status'];
+            $object->SlotId = $data['designation'];
         }
-        $object['Description'] = $data['description'];
+        $object->Description = $data['description'];
         return $object;
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
-        $data = array();
-        $data['name'] = $object['Name'];
-        $data['description'] = $object['Description'];
-        if (array_key_exists('SlotId', $object)) {
-            $data['designation'] = $object['SlotId'];
+        $data = [];
+        $data['name'] = $object->name;
+        $data['description'] = $object->description;
+        if ($object instanceof AbstractModel && $object->offsetExists('SlotId') || property_exists($object, 'slotId')) {
+            $data['designation'] = $object->slotId;
             $data['purpose'] = null;
-            $data['status'] = $object['Status'];
+            $data['status'] = $object->status;
         } else {
-            $data['designation'] = $object['Name'];
-            $data['purpose'] = $object['Status'];
+            $data['designation'] = $object->name;
+            $data['purpose'] = $object->status;
             $data['status'] = null;
         }
         return $data;

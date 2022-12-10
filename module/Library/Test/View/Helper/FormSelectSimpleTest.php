@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the FormSelectSimple helper
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -37,10 +38,9 @@ class FormSelectSimpleTest extends AbstractTest
 <option>option2</option>
 </select>
 EOT;
-        $plugins = clone \Library\Application::getService('ViewHelperManager');
-        $view = new \Zend\View\Renderer\PhpRenderer;
-        $view->setHelperPluginManager($plugins);
-        $helper = $plugins->get('formElement');
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+        $view->setHelperPluginManager(static::$_helperManager);
+        $helper = static::$_helperManager->get('formElement');
         $helper->setView($view);
         $this->assertEquals($expected, $helper($element));
     }

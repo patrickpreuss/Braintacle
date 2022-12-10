@@ -37,28 +37,24 @@ Alias /braintacle /usr/local/share/braintacle/public
     # Default: config/braintacle.ini relative to the Braintacle root directory
     #SetEnv BRAINTACLE_CONFIG /usr/local/share/braintacle/config/braintacle.ini
 
-    # Uncomment and adjust paths if Zend Framework and/or NADA are not in the
-    # global include path
-    # php_value include_path /usr/local/share/php/Zend/library:/usr/local/share/php/NADA
-
-    # Change "Allow" to restrict access
-    Order Deny,Allow
-    Deny from all
-    Allow from all
+    # Change to restrict access
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
 
     # Uncomment this to force HTTPS connection
     # SSLRequireSSL
 
-    # Uncomment and adjust if the default upload limit is not sufficient. Note
-    # that the actual limit may be smaller than the values provided here.
+    # Uncomment and adjust if the default upload limit is not sufficient.
     # php_value upload_max_filesize 128m
     # php_value post_max_size 128m
     # php_value memory_limit 128m
 
-    # Set to 'development' to see more (non-fatal) errors
-    SetEnv APPLICATION_ENV production
-
     # Enable static, site-independent configuration via .htaccess file.
     # Don't touch this!
-    AllowOverride FileInfo Options=php_flag
+    AllowOverride FileInfo
 </Directory>

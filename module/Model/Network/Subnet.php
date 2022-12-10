@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Subnet definition and properties
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,37 +22,54 @@
 
 namespace Model\Network;
 
+use DomainException;
+use Library\Validator\IpNetworkAddress;
+use ReturnTypeWillChange;
+
 /**
  * Subnet definition and properties
  *
  * This class provides an interface to all subnets and general statistics about
  * details about inventoried, categorized and unknown interfaces.
  *
- * @property string $Address IPv4 Network Address, example: 192.168.1.0
- * @property string $Mask IPv4 Subnet Mask, example: 255.255.255.0
- * @property-read string $CidrAddress CIDR Address/Mask notation, example: 192.168.1.0/24
+ * @property string $Address IPv4/IPv6 network address, example: 192.168.1.0 or fe80::6860:a9a6:618a:8ecd
+ * @property string $Mask IPv4IPv6 subnet mask, example: 255.255.255.0 or ffff:ffff:ffff:ffff:0000:0000:0000:0000
+ * @property-read string $CidrAddress CIDR address/mask notation, example: 192.168.1.0/24 or fe80::/64
  * @property string $Name Assigned name (NULL if no name has been assigned)
- * @property integer $NumInventoried Number of interfaces belonging to an inventoried computer
+ * @property integer $NumInventoried Number of interfaces belonging to an inventoried client
  * @property integer $NumIdentified Number of uninventoried, but manually identified interfaces
  * @property integer $NumUnknown Number of uninventoried and unidentified interfaces
  */
-class Subnet extends \ArrayObject
+class Subnet extends \Model\AbstractModel
 {
-    /** {@inheritdoc} */
-    public function offsetGet($index)
+    #[ReturnTypeWillChange]
+    public function offsetGet($key)
     {
-        if ($index == 'CidrAddress') {
-            $mask = ip2long($this['Mask']);
-            if ($mask != 0) { // Next line would not work on 32 bit systems
-                $mask = 32 - log(($mask ^ 0xffffffff) + 1, 2);
+        if ($key == 'CidrAddress') {
+            $address = $this['Address'];
+            $mask = $this['Mask'];
+
+            // Validate Address and Mask so that the subsequent code can make
+            // assumptions about them.
+            $validator = new IpNetworkAddress();
+            if (!$validator->isValid("$address/$mask")) {
+                $messages = $validator->getMessages();
+                throw new DomainException(array_shift($messages));
             }
-            $mask = (string) $mask;
-            if (!ctype_digit($mask)) {
-                throw new \DomainException('Not a CIDR mask: ' . $this['Mask']);
+
+            if (ctype_digit((string) $mask)) {
+                $suffix = $mask;
+            } else {
+                // Convert IPv4 mask to CIDR suffix.
+                $suffix = ip2long($mask);
+                if ($suffix != 0) { // Next line would not work on 32 bit systems
+                    $suffix = 32 - log(($suffix ^ 0xFFFFFFFF) + 1, 2);
+                }
             }
-            return $this['Address'] . '/' . $mask;
+
+            return "$address/$suffix";
         } else {
-            return parent::offsetGet($index);
+            return parent::offsetGet($key);
         }
     }
 }

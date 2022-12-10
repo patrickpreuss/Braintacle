@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for table objects
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database;
+namespace Database;
+
+use Laminas\Hydrator\HydratorInterface;
 
 /**
  * Base class for table objects
@@ -28,42 +31,50 @@ Namespace Database;
  * Database\Table\ClassName services which will create and set up object
  * instances.
  */
-abstract class AbstractTable extends \Zend\Db\TableGateway\AbstractTableGateway
+abstract class AbstractTable extends \Laminas\Db\TableGateway\AbstractTableGateway
 {
     /**
      * Service manager
-     * @var \Zend\ServiceManager\ServiceLocatorInterface
+     * @var \Laminas\ServiceManager\ServiceLocatorInterface
      */
     protected $_serviceLocator;
 
     /**
      * Hydrator
-     * @var \Zend\Stdlib\Hydrator\AbstractHydrator
      */
-    protected $_hydrator;
+    protected HydratorInterface $_hydrator;
 
     /**
      * Constructor
      *
-     * @param \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator Service manager instance
+     * @param \Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator Service manager instance
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->_serviceLocator = $serviceLocator;
         if (!$this->table) {
             // If not set explicitly, derive table name from class name.
             // Uppercase letters cause an underscore to be inserted, except at
             // the beginning of the string.
-            $this->table = strtolower(preg_replace('/(.)([A-Z])/', '$1_$2', $this->_getClassName()));
+            $this->table = strtolower(preg_replace('/(.)([A-Z])/', '$1_$2', $this->getClassName()));
         }
         $this->adapter = $serviceLocator->get('Db');
     }
 
     /**
+     * Get service locator.
+     * @codeCoverageIgnore
+     */
+    public function getServiceLocator(): \Laminas\ServiceManager\ServiceLocatorInterface
+    {
+        return $this->_serviceLocator;
+    }
+
+    /**
      * Get hydrator suitable for bridging with model
      *
-     * @return \Zend\Stdlib\Hydrator\AbstractHydrator|null
+     * @return \Laminas\Hydrator\AbstractHydrator|null
      */
     public function getHydrator()
     {
@@ -71,12 +82,23 @@ abstract class AbstractTable extends \Zend\Db\TableGateway\AbstractTableGateway
     }
 
     /**
+     * Get database connection object
+     *
+     * @return \Laminas\Db\Adapter\Driver\ConnectionInterface
+     */
+    public function getConnection()
+    {
+        return $this->getAdapter()->getDriver()->getConnection();
+    }
+
+    /**
      * Helper method to get class name without namespace
-     * @internal
+     *
      * @return string Class name
+     * @internal
      * @codeCoverageIgnore
      */
-    protected function _getClassName()
+    protected function getClassName()
     {
         return substr(get_class($this), strrpos(get_class($this), '\\') + 1);
     }
@@ -86,63 +108,125 @@ abstract class AbstractTable extends \Zend\Db\TableGateway\AbstractTableGateway
      *
      * The schema file is located in ./data/ClassName.json and contains all
      * information required to create or alter the table.
+     *
+     * @param bool $prune Drop obsolete columns
      * @codeCoverageIgnore
      */
-    public function setSchema()
+    public function updateSchema($prune = false)
     {
         $logger = $this->_serviceLocator->get('Library\Logger');
-        $schema = \Zend\Config\Factory::fromFile(
-            Module::getPath('data/Tables/' . $this->_getClassName() . '.json')
+        $schema = \Laminas\Config\Factory::fromFile(
+            Module::getPath('data/Tables/' . $this->getClassName() . '.json')
         );
         $database = $this->_serviceLocator->get('Database\Nada');
 
-        $this->_preSetSchema($logger, $schema, $database);
-        \Database\SchemaManager::setSchema($logger, $schema, $database);
-        $this->_postSetSchema($logger, $schema, $database);
+        $this->preSetSchema($logger, $schema, $database, $prune);
+        $this->setSchema($logger, $schema, $database, $prune);
+        $this->postSetSchema($logger, $schema, $database, $prune);
     }
 
     /**
      * Hook to be called before creating/altering table schema
      *
-     * @param \Zend\Log\Logger $logger Logger instance
+     * @param \Laminas\Log\Logger $logger Logger instance
      * @param array $schema Parsed table schema
-     * @param \Nada_Database $database Database object
+     * @param \Nada\Database\AbstractDatabase $database Database object
+     * @param bool $prune Drop obsolete columns
      * @codeCoverageIgnore
      */
-    protected function _preSetSchema($logger, $schema, $database)
+    protected function preSetSchema($logger, $schema, $database, $prune)
     {
+    }
+
+    /**
+     * Create or update table
+     *
+     * The default implementation calls \Database\SchemaManager::setSchema().
+     *
+     * @param \Laminas\Log\Logger $logger Logger instance
+     * @param array $schema Parsed table schema
+     * @param \Nada\Database\AbstractDatabase $database Database object
+     * @param bool $prune Drop obsolete columns
+     * @codeCoverageIgnore
+     */
+    protected function setSchema($logger, $schema, $database, $prune)
+    {
+        \Database\SchemaManager::setSchema(
+            $logger,
+            $schema,
+            $database,
+            static::getObsoleteColumns($logger, $schema, $database),
+            $prune
+        );
     }
 
     /**
      * Hook to be called after creating/altering table schema
      *
-     * @param \Zend\Log\Logger $logger Logger instance
+     * @param \Laminas\Log\Logger $logger Logger instance
      * @param array $schema Parsed table schema
-     * @param \Nada_Database $database Database object
+     * @param \Nada\Database\AbstractDatabase $database Database object
+     * @param bool $prune Drop obsolete columns
      * @codeCoverageIgnore
      */
-    protected function _postSetSchema($logger, $schema, $database)
+    protected function postSetSchema($logger, $schema, $database, $prune)
     {
+    }
+
+    /**
+     * Get names of columns that are present in the current database but not in
+     * the given schema
+     *
+     * @param \Laminas\Log\Logger $logger Logger instance
+     * @param array $schema Parsed table schema
+     * @param \Nada\Database\AbstractDatabase $database Database object
+     * @return string[]
+     * @codeCoverageIgnore
+     */
+    public static function getObsoleteColumns($logger, $schema, $database)
+    {
+        // Table may not exist yet if it's just about to be created
+        if (in_array($schema['name'], $database->getTableNames())) {
+            $schemaColumns = array_column($schema['columns'], 'name');
+            $tableColumns = array_keys($database->getTable($schema['name'])->getColumns());
+            return array_diff($tableColumns, $schemaColumns);
+        } else {
+            return array();
+        }
+    }
+
+    /**
+     * Rename table.
+     * @codeCoverageIgnore
+     */
+    protected function rename(
+        \Laminas\Log\LoggerInterface $logger,
+        \Nada\Database\AbstractDatabase $database,
+        string $oldName
+    ): void {
+        $logger->info("Renaming table $oldName to $this->table...");
+        $database->renameTable($oldName, $this->table);
+        $logger->info('done.');
     }
 
     /**
      * Drop a column if it exists
      *
-     * @param \Zend\Log\Logger $logger Logger instance
-     * @param \Nada_Database $database Database object
+     * @param \Laminas\Log\Logger $logger Logger instance
+     * @param \Nada\Database\AbstractDatabase $database Database object
      * @param string $column column name
      * @codeCoverageIgnore
      */
-    protected function _dropColumnIfExists($logger, $database, $column)
+    protected function dropColumnIfExists($logger, $database, $column)
     {
         $tables = $database->getTables();
         if (isset($tables[$this->table])) {
             $table = $tables[$this->table];
             $columns = $table->getColumns();
             if (isset($columns[$column])) {
-                $logger->info("Dropping column $this->table.$column...");
+                $logger->notice("Dropping column $this->table.$column...");
                 $table->dropColumn($column);
-                $logger->info('done.');
+                $logger->notice('done.');
             }
         }
     }
@@ -155,14 +239,14 @@ abstract class AbstractTable extends \Zend\Db\TableGateway\AbstractTableGateway
      */
     public function fetchCol($name)
     {
-        $select = $this->sql->select();
+        $select = $this->getSql()->select();
         $select->columns(array($name), false);
         $resultSet = $this->selectWith($select);
 
         // Map column name to corresponding result key
-        if ($resultSet instanceof \Zend\Db\ResultSet\HydratingResultSet) {
+        if ($resultSet instanceof \Laminas\Db\ResultSet\HydratingResultSet) {
             $hydrator = $resultSet->getHydrator();
-            if ($hydrator instanceof \Zend\Stdlib\Hydrator\AbstractHydrator) {
+            if ($hydrator instanceof \Laminas\Hydrator\AbstractHydrator) {
                 $name = $hydrator->hydrateName($name);
             }
         }

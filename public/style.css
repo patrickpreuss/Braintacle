@@ -1,7 +1,7 @@
 /**
  * Stylesheet for the web interface
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -86,7 +86,7 @@ ul.navigation_sub {
     border-bottom: 1px solid black;
 }
 
-/* Navigation for computers and groups */
+/* Navigation for clients and groups */
 ul.navigation_details {
     background-color: #ffffff;
     line-height: 175%;
@@ -231,12 +231,20 @@ th a {
     text-align: center;
 }
 
+.textcenter ul {
+    display: inline-block;
+}
+
 .textnormalsize {
     font-size: 100%;
 }
 
 .nowrap {
     white-space: nowrap;
+}
+
+.topspacing {
+    margin-top: 2ex;
 }
 
 .blacklisted {
@@ -258,7 +266,7 @@ td.label {
     white-space: nowrap;
 }
 
-.package_inprogress, .package_error {
+.package_running, .package_error {
     color: red;
 }
 
@@ -266,7 +274,7 @@ td.label {
     color: green;
 }
 
-.package_notnotified {
+.package_pending {
     color: blue;
 }
 
@@ -294,19 +302,6 @@ td.label {
 }
 
 /* used for forms */
-dt {
-    width: 30em;
-    margin-bottom: 2ex;
-    float: left;
-    clear: both;
-    text-align: right;
-}
-dd {
-    margin-left: 1em;
-    margin-bottom: 1.8ex;
-    float: left;
-    clear: right;
-}
 ul.errors {
     margin-top: 0;
     margin-bottom: 0.8ex;
@@ -316,9 +311,6 @@ ul.errors {
 }
 
 /* general format for input fields */
-input,select {
-    background-color: #e0f0ff;
-}
 input[type=text],
 input[type=file] {
     width: 30em;
@@ -329,7 +321,6 @@ input[type=radio] {
 textarea {
     width: 30em;
     height: 10ex;
-    background-color: #e0f0ff;
 }
 
 /* special formats */
@@ -346,19 +337,18 @@ input[size="8"]
     width: 8em;
 }
 
-.table_network_devices, .form_manageregistryvalues table {
-    font-size: 80%;
-}
-
-.table_registry_values td {
-    padding-top: 2ex;
-}
-
 .table label {
     display: table-row;
 }
 
-.table label span, .table label[for], .table span.label, .table input, .table select, .table textarea {
+.table label span,
+.table label[for],
+.table span.label,
+.table button,
+.table input,
+.table select,
+.table textarea
+{
     display: table-cell;
     margin: 1.4ex 1em 1.4ex 1em;
     vertical-align: middle;
@@ -377,89 +367,191 @@ input[size="8"]
     border-style: solid;
 }
 
-.form input[type=submit] {
+.form input[type=submit], .form button[type=submit] {
     margin-top: 3ex;
 }
 
-.form_yesno {
-    text-align: center;
+/* Rules for forms rendered by the default form view helper */
+form.form_package, form.form_search {
+    margin: 2ex;
+    display: grid;
+    grid-template-columns: [label-start] 40% [label-end element-start] max-content [element-end];
+    grid-gap: 2ex;
+}
+.form_package label, .form_search label {
+    display: contents;
+}
+.label,
+.form_package label span,
+.form_search label span {
+    grid-column: label;
+    text-align: right;
+    align-self: center;
+}
+.form_package input,
+.form_package select,
+.form_package .errors,
+.form_package_update fieldset,
+.form_search input,
+.form_search select,
+.form_search .errors
+{
+    grid-column: element;
+    justify-self: start;
 }
 
-.form_package_assign label span {
-    text-align: left;
-}
+/* Rules for individual forms */
 
-.form_package_assign input[type="submit"] {
-    margin-left: 0;
+form.form_addtogroup {
+    display: table;
+    margin-left: auto;
+    margin-right: auto;
 }
-
-.form_addtogroup fieldset {
-    border: none;
-    padding: 0;
-}
-
-.form_addtogroup fieldset + fieldset {
+form.form_addtogroup > * {
+    display: block;
     margin-top: 2ex;
 }
-
-.form_addtogroup legend span{
-    display: none;
+.form_addtogroup .what + .where {
+    margin-top: 4ex;
 }
-
 .form_addtogroup input, .form_addtogroup select {
     margin-left: 0;
 }
-
-.form_addtogroup input[type="radio"] {
-    display: inline;
-}
-
 .form_addtogroup label span {
     display: block;
-    text-align: left;
-    margin: 1ex 0 0;
-}
-
-.form_addtogroup .error {
-    margin: 0;
-    padding: 0;
-    text-align: left;
-}
-
-.form_clientconfig .label {
-    width: 50%;
-}
-
-.form_clientconfig .values {
-    text-align: left;
-    white-space: nowrap;
-}
-
-.form_clientconfig > .table {
-    width: 90%;
-    text-align: center;
-    font-size: 90%;
-}
-
-.form_clientconfig input {
-    display: inline;
+    margin-bottom: .5ex;
 }
 
 .form_clientconfig fieldset {
     margin-top: 2ex;
 }
-
-.form_clientconfig .error {
+.form_clientconfig fieldset > div {
+    display: grid;
+    grid-template-columns: [label-start] 50% [label-end element-start] 50% [element-end];
+    grid-gap: 1em;
+}
+.form_clientconfig fieldset > div > span {
+    grid-column: element;
+}
+.form_clientconfig fieldset input {
+    margin-right: 1em;
+}
+.form_clientconfig ul {
+    grid-column: element;
+    color: red;
     margin: 0;
-    text-align: left;
     padding-left: 1em;
 }
-
 .form_clientconfig legend {
     margin: auto;
     padding-left: .5em;
     padding-right: .5em;
     font-weight: bold;
+}
+.form_clientconfig label span {
+    margin-right: 1em;
+}
+.form_clientconfig [type=submit] {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.form_manageregistryvalues fieldset {
+    border: none;
+    margin-top: 3ex;
+}
+.form_manageregistryvalues legend {
+    margin: auto;
+    font-weight: bold;
+}
+.form_manageregistryvalues label {
+    display: table-row;
+}
+.form_manageregistryvalues fieldset[name=existing] > div {
+    display: table;
+    margin-left: auto;
+    margin-right: auto;
+}
+.form_manageregistryvalues fieldset[name=existing] label * {
+    margin-top: 1ex;
+    margin-bottom: 1ex;
+}
+.form_manageregistryvalues fieldset[name=existing] label span {
+    margin-left: .5em;
+    margin-right: 1em;
+}
+.form_manageregistryvalues fieldset[name=existing] a {
+    display: table-cell;
+}
+.form_manageregistryvalues fieldset[name=existing] ul {
+    color: red;
+    margin-top: 0;
+    padding-left: 1.5em;
+}
+.form_manageregistryvalues fieldset[name=new_value] > div {
+    display: table;
+    width: 100%;
+}
+.form_manageregistryvalues fieldset[name=new_value] label * {
+    display: table-cell;
+    margin-left: .5em;
+    margin-top: 1ex;
+    margin-bottom: 1ex;
+}
+.form_manageregistryvalues fieldset[name=new_value] label select {
+    max-width: 30em;
+}
+.form_manageregistryvalues fieldset[name=new_value] label span {
+    width: 50%;
+    text-align: right;
+    padding-right: .5em;
+}
+.form_manageregistryvalues fieldset[name=new_value] ul {
+    color: red;
+    width: 100%;
+    margin-top: 0;
+    margin-bottom: 1ex;
+    margin-left: 1.5em;
+    padding-left: 100%;
+}
+.form_manageregistryvalues [type=submit] {
+    display: block;
+    margin: auto;
+}
+
+.form_package_assign label span {
+    text-align: left;
+}
+.form_package_assign button {
+    margin-left: 0;
+}
+
+.form_package_update .label {
+    grid-column: label;
+    text-align: right;
+}
+.form_package_update legend {
+    display: none;
+}
+.form_package_update fieldset {
+    grid-column: element;
+    width: 100%;
+    box-sizing: border-box;
+}
+.form_package_update fieldset label {
+    display: block;
+    margin: 1ex 0 1ex 0;
+    width: max-content;
+}
+.form_package_update fieldset input {
+    margin-right: .5em;
+}
+
+/* The following rules are for forms still using the deprecated render() method. */
+
+.form_yesno {
+    text-align: center;
 }
 
 .form_definefields .cell {
@@ -483,12 +575,12 @@ input[size="8"]
     padding: 0;
 }
 
-.form_deletecomputer {
+.form_deleteclient {
     text-align: center;
     margin-top: 4ex;
 }
 
-.form_deletecomputer input[type=submit]{
+.form_deleteclient input[type=submit]{
     margin: 4ex 1em;
 }
 
@@ -505,7 +597,7 @@ input[size="8"]
 }
 
 .form_groupmemberships legend {
-    display: inline-block;
+    float: left;
 }
 
 .form_groupmemberships input[type=submit] {
@@ -516,18 +608,6 @@ input[size="8"]
 
 .form_login input[type="text"], .form_login input[type="password"] {
     width: 12em;
-}
-
-.form_manageregistryvalues h2 {
-    margin: 0;
-}
-
-.form_manageregistryvalues td input {
-    margin: 1.2ex 0em 1.2ex 0em;
-}
-
-.form_networkdevicetypes input {
-    display: inline;
 }
 
 .form_networkdevicetypes label span {
@@ -543,24 +623,18 @@ input[size="8"]
     padding: 0;
 }
 
-.form_package_update span.label {
-    max-width: 20em;
-}
-
-.form_package_update fieldset label span, .form_preferences_packages fieldset label span {
-    text-align: left;
-}
-
-.form_package_update fieldset, .form_preferences_packages fieldset {
-    margin: 1.4ex .9em 1.4ex .9em;
-}
-
-.form_package_update legend, .form_preferences_packages legend {
-    display: none;
-}
-
 .form_customfields, .form_productkey {
     margin-top: 4ex;
+}
+
+.form_preferences_packages fieldset label span {
+    text-align: left;
+}
+.form_preferences_packages fieldset {
+    margin: 1.4ex .9em 1.4ex .9em;
+}
+.form_preferences_packages legend {
+    display: none;
 }
 
 .form_productkey .error, .form_networkdevice .error {
@@ -574,4 +648,8 @@ input[size="8"]
     display: block;
     text-align: center;
     margin: 2ex auto 0 auto;
+}
+
+.form_software input[type="submit"] {
+    margin-bottom: 2ex;
 }

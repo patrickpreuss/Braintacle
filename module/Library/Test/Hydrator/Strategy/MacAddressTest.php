@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the MacAddress strategy
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,20 +22,20 @@
 
 namespace Library\Test\Hydrator\Strategy;
 
-class MacAddressTest extends \PHPUnit_Framework_TestCase
+class MacAddressTest extends \PHPUnit\Framework\TestCase
 {
     public function testHydrate()
     {
-        $strategy = new \Library\Hydrator\Strategy\MacAddress;
+        $strategy = new \Library\Hydrator\Strategy\MacAddress();
         $address = '00:00:5E:00:53:00';
-        $macAddress = $strategy->hydrate($address);
+        $macAddress = $strategy->hydrate($address, null);
         $this->assertInstanceOf('Library\MacAddress', $macAddress);
         $this->assertEquals($address, $macAddress);
     }
 
     public function testExtract()
     {
-        $strategy = new \Library\Hydrator\Strategy\MacAddress;
+        $strategy = new \Library\Hydrator\Strategy\MacAddress();
         $address = '00:00:5E:00:53:00';
         $macAddress = new \Library\MacAddress($address);
         $this->assertSame($address, $strategy->extract($macAddress));

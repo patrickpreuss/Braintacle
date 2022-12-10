@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Displays table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -25,13 +26,13 @@ class DisplaysTest extends AbstractTest
 {
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testHydrator()
     {
         $hydrator = static::$_table->getHydrator();
-        $this->assertInstanceOf('Zend\Stdlib\Hydrator\ArraySerializable', $hydrator);
+        $this->assertInstanceOf(\Laminas\Hydrator\ArraySerializableHydrator::class, $hydrator);
 
         $map = $hydrator->getNamingStrategy();
         $this->assertInstanceOf('Database\Hydrator\NamingStrategy\MapNamingStrategy', $map);
@@ -39,17 +40,17 @@ class DisplaysTest extends AbstractTest
         $this->assertEquals('Manufacturer', $map->hydrate('manufacturer'));
         $this->assertEquals('Description', $map->hydrate('caption'));
         $this->assertEquals('Serial', $map->hydrate('serial'));
-        $this->assertEquals('ProductionDate', $map->hydrate('description'));
+        $this->assertEquals('Edid', $map->hydrate('description'));
         $this->assertEquals('Type', $map->hydrate('type'));
 
         $this->assertEquals('manufacturer', $map->extract('Manufacturer'));
         $this->assertEquals('caption', $map->extract('Description'));
         $this->assertEquals('serial', $map->extract('Serial'));
-        $this->assertEquals('description', $map->extract('ProductionDate'));
+        $this->assertEquals('description', $map->extract('Edid'));
         $this->assertEquals('type', $map->extract('Type'));
 
         $resultSet = static::$_table->getResultSetPrototype();
-        $this->assertInstanceOf('Zend\Db\ResultSet\HydratingResultSet', $resultSet);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\HydratingResultSet', $resultSet);
         $this->assertEquals($hydrator, $resultSet->getHydrator());
     }
 }

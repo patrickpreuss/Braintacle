@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Cpu item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -59,9 +60,10 @@ class Cpu extends DefaultPlugin
                 }
             }
             // flatten array, resulting in per-CPU list
-            $result = call_user_func_array(
-                'array_merge',
-                call_user_func_array('array_merge', $cpu)
+            $result = array_merge(
+                ...array_values(
+                    array_merge(...$cpu)
+                )
             );
         }
 
@@ -78,7 +80,7 @@ class Cpu extends DefaultPlugin
     /** {@inheritdoc} */
     public function columns()
     {
-        $columns = array_values($this->_table->getHydrator()->getNamingStrategy()->getExtractorMap());
+        $columns = array_values($this->_table->getHydrator()->getNamingStrategy()->getExtractionMap());
         $columns[] = 'hardware_id';
         $this->_select->columns($columns);
     }

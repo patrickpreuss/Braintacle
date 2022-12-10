@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the LoggerServiceFactory class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,16 +25,17 @@ namespace Library\Test\Log;
 /**
  * Tests for the LoggerServiceFactory class
  */
-class LoggerServiceFactoryTest extends \PHPUnit_Framework_TestCase
+class LoggerServiceFactoryTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * Test service
      */
     public function testLoggerService()
     {
-        $logger = \Library\Application::getService('Library\Logger');
+        $application = \Library\Application::init('Library');
+        $logger = $application->getServiceManager()->get('Library\Logger');
 
-        $this->assertInstanceOf('\Zend\Log\Logger', $logger);
+        $this->assertInstanceOf('\Laminas\Log\Logger', $logger);
 
         // Log a message. The NULL writer should be attached so that no
         // exception should be thrown.

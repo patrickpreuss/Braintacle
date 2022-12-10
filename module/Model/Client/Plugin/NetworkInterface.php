@@ -1,8 +1,9 @@
 <?php
+
 /**
  * NetworkInterface item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -35,8 +36,8 @@ class NetworkInterface extends DefaultPlugin
         $this->_select->join(
             'blacklist_macaddresses',
             'macaddress = macaddr',
-            array('is_blacklisted' => new \Zend\Db\Sql\Literal('(blacklist_macaddresses.macaddress IS NOT NULL)')),
-            \Zend\Db\Sql\Select::JOIN_LEFT
+            array('is_blacklisted' => new \Laminas\Db\Sql\Literal('(blacklist_macaddresses.macaddress IS NOT NULL)')),
+            \Laminas\Db\Sql\Select::JOIN_LEFT
         );
     }
 }

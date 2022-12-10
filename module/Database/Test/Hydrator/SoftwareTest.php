@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Software hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,161 +22,221 @@
 
 namespace Database\Test\Hydrator;
 
-class SoftwareTest extends \PHPUnit_Framework_TestCase
-{
-    public function testHydrateWindows()
-    {
-        $hydrator = $this->getMockBuilder('Database\Hydrator\Software')->setMethods(array('hydrateValue'))->getMock();
-        $hydrator->method('hydrateValue')->will(
-            $this->returnValueMap(
-                array(
-                    array('Name', '_name', '_Name'),
-                    array('InstallLocation', '_folder', '_InstallLocation'),
-                    array('IsHotfix', '_source', '_IsHotfix'),
-                    array('InstallationDate', '_installdate', '_InstallationDate'),
-                    array('Architecture', '_bitswidth', '_Architecture'),
-                )
-            )
-        );
-        $agentData = array(
-            'is_windows' => true,
-            'name' => '_name',
-            'version' => '_version',
-            'comments' => '_comment',
-            'publisher' => '_publisher',
-            'folder' => '_folder',
-            'source' => '_source',
-            'guid' => '_guid',
-            'language' => '_language',
-            'installdate' => '_installdate',
-            'bitswidth' => '_bitswidth',
-        );
-        $software = array(
-            'Name' => '_Name',
-            'Version' => '_version',
-            'Comment' => '_comment',
-            'Publisher' => '_publisher',
-            'InstallLocation' => '_InstallLocation',
-            'IsHotfix' => '_IsHotfix',
-            'Guid' => '_guid',
-            'Language' => '_language',
-            'InstallationDate' => '_InstallationDate',
-            'Architecture' => '_Architecture',
-        );
-        $object = new \ArrayObject;
-        $this->assertSame($object, $hydrator->hydrate($agentData, $object));
-        $this->assertEquals($software, $object->getArrayCopy());
-    }
+use Database\Hydrator\Software;
+use DateTime;
+use Laminas\Hydrator\ObjectPropertyHydrator;
+use Model\Client\Item\Software as ItemSoftware;
+use PHPUnit\Framework\MockObject\MockObject;
+use stdClass;
 
-    public function testHydrateUnix()
+class SoftwareTest extends \PHPUnit\Framework\TestCase
+{
+    public function hydrateProvider()
     {
-        $hydrator = $this->getMockBuilder('Database\Hydrator\Software')->setMethods(array('hydrateValue'))->getMock();
-        $hydrator->expects($this->never())->method('hydrateValue');
-        $agentData = array(
+        $hydratedWindows = [
+            'name' => 'NameHydrated',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'publisher' => 'Publisher',
+            'installLocation' => 'InstallLocationHydrated',
+            'isHotfix' => 'IsHotfixHydrated',
+            'guid' => 'Guid',
+            'language' => 'Language',
+            'installationDate' => new DateTime('2022-11-03'),
+            'architecture' => 64,
+        ];
+        $extractedWindows = [
+            'is_windows' => true,
+            'is_android' => false,
+            'name' => 'NameExtracted',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'publisher' => 'Publisher',
+            'install_location' => 'InstallLocationExtracted',
+            'is_hotfix' => 'IsHotfixExtracted',
+            'guid' => 'Guid',
+            'language' => 'Language',
+            'installation_date' => 'InstallationDateExtracted',
+            'architecture' => 'ArchitectureExtracted',
+        ];
+
+        $hydratedUnix = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'size' => 42,
+        ];
+        $extractedUnix = [
             'is_windows' => false,
-            'name' => '_name',
-            'version' => '_version',
-            'comments' => '_comment',
+            'is_android' => false,
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
             'publisher' => 'ignored',
-            'folder' => 'ignored',
-            'source' => 'ignored',
+            'install_location' => 'ignored',
+            'is_hotfix' => 'ignored',
             'guid' => 'ignored',
             'language' => 'ignored',
-            'installdate' => 'ignored',
-            'bitswidth' => 'ignored',
-            'filesize' => '_filesize',
-        );
-        $software = array(
-            'Name' => '_name',
-            'Version' => '_version',
-            'Comment' => '_comment',
-            'Size' => '_filesize',
-        );
-        $object = new \ArrayObject;
-        $this->assertSame($object, $hydrator->hydrate($agentData, $object));
-        $this->assertEquals($software, $object->getArrayCopy());
+            'installation_date' => 'ignored',
+            'architecture' => 'ignored',
+            'size' => 42,
+        ];
+
+        $hydratedAndroid = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'publisher' => 'Publisher',
+            'installLocation' => 'InstallLocation',
+        ];
+        $extractedAndroid = [
+            'is_windows' => false,
+            'is_android' => true,
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'ignored',
+            'publisher' => 'Publisher',
+            'install_location' => 'InstallLocation',
+            'is_hotfix' => 'ignored',
+            'guid' => 'ignored',
+            'language' => 'ignored',
+            'installation_date' => 'ignored',
+            'architecture' => 'ignored',
+            'size' => 'ignored',
+        ];
+
+        return [
+            [$hydratedWindows, $extractedWindows],
+            [$hydratedUnix, $extractedUnix],
+            [$hydratedAndroid, $extractedAndroid],
+        ];
     }
 
-    public function testExtractWindows()
+    /** @dataProvider hydrateProvider */
+    public function testHydrate($hydrated, $extracted)
     {
-        $hydrator = $this->getMockBuilder('Database\Hydrator\Software')->setMethods(array('extractValue'))->getMock();
-        $hydrator->method('extractValue')->will(
-            $this->returnValueMap(
-                array(
-                    array('source', '_IsHotfix', '_source'),
-                    array('installdate', '_InstallationDate', '_installdate'),
-                )
-            )
-        );
-        $software = array(
-            'Name' => '_Name',
-            'Version' => '_Version',
-            'Comment' => '_Comment',
-            'Publisher' => '_Publisher',
-            'InstallLocation' => '_InstallLocation',
-            'IsHotfix' => '_IsHotfix',
-            'Guid' => '_Guid',
-            'Language' => '_Language',
-            'InstallationDate' => '_InstallationDate',
-            'Architecture' => '_Architecture',
-        );
-        $agentData = array(
-            'name' => '_Name',
-            'version' => '_Version',
-            'comments' => '_Comment',
-            'publisher' => '_Publisher',
-            'folder' => '_InstallLocation',
-            'source' => '_source',
-            'guid' => '_Guid',
-            'language' => '_Language',
-            'installdate' => '_installdate',
-            'bitswidth' => '_Architecture',
-            'filesize' => null,
-        );
-        $this->assertEquals($agentData, $hydrator->extract($software));
+        /** @var MockObject|Software */
+        $hydrator = $this->createPartialMock(Software::class, ['hydrateValue']);
+        $hydrator->method('hydrateValue')->willReturnMap([
+            ['name', 'NameExtracted', 'NameHydrated'],
+            ['installLocation', 'InstallLocationExtracted', 'InstallLocationHydrated'],
+            ['isHotfix', 'IsHotfixExtracted', 'IsHotfixHydrated'],
+            ['installationDate', 'InstallationDateExtracted', new DateTime('2022-11-03')],
+            ['architecture', 'ArchitectureExtracted', 64],
+        ]);
+
+        $object = new ItemSoftware();
+        $this->assertSame($object, $hydrator->hydrate($extracted, $object));
+        $this->assertEquals($hydrated, get_object_vars($object));
     }
 
-    public function testExtractUnix()
+    public function extractProvider()
     {
-        $hydrator = $this->getMockBuilder('Database\Hydrator\Software')->setMethods(array('extractValue'))->getMock();
-        $hydrator->expects($this->never())->method('extractValue');
-        $software = array(
-            'Name' => '_Name',
-            'Version' => '_Version',
-            'Comment' => '_Comment',
-            'Size' => '_Size',
-        );
-        $agentData = array(
-            'name' => '_Name',
-            'version' => '_Version',
-            'comments' => '_Comment',
+        $hydratedWindows = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'publisher' => 'Publisher',
+            'installLocation' => 'InstallLocation',
+            'isHotfix' => true,
+            'guid' => 'Guid',
+            'language' => 'Language',
+            'installationDate' => new DateTime('2022-11-03'),
+            'architecture' => 64,
+        ];
+        $extractedWindows = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'publisher' => 'Publisher',
+            'install_location' => 'InstallLocation',
+            'is_hotfix' => 'IsHotfixExtracted',
+            'guid' => 'Guid',
+            'language' => 'Language',
+            'installation_date' => 'InstallationDateExtracted',
+            'architecture' => 64,
+            'size' => null,
+        ];
+
+        $hydratedUnix = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
+            'size' => 42,
+        ];
+        $extractedUnix = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => 'Comment',
             'publisher' => null,
-            'folder' => null,
-            'source' => null,
+            'install_location' => null,
+            'is_hotfix' => null,
             'guid' => null,
             'language' => null,
-            'installdate' => null,
-            'bitswidth' => null,
-            'filesize' => '_Size',
-        );
-        $this->assertEquals($agentData, $hydrator->extract($software));
+            'installation_date' => null,
+            'architecture' => null,
+            'size' => 42,
+        ];
+
+        $hydratedAndroid = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'publisher' => 'Publisher',
+            'installLocation' => 'InstallLocation',
+        ];
+        $extractedAndroid = [
+            'name' => 'Name',
+            'version' => 'Version',
+            'comment' => null,
+            'publisher' => 'Publisher',
+            'install_location' => 'InstallLocation',
+            'is_hotfix' => null,
+            'guid' => null,
+            'language' => null,
+            'installation_date' => null,
+            'architecture' => null,
+            'size' => null,
+        ];
+
+        return [
+            [$hydratedWindows, $extractedWindows],
+            [$hydratedUnix, $extractedUnix],
+            [$hydratedAndroid, $extractedAndroid],
+        ];
+    }
+
+    /** @dataProvider extractProvider */
+    public function testExtract($hydrated, $extracted)
+    {
+        /** @var MockObject|Software */
+        $hydrator = $this->createPartialMock(Software::class, ['extractValue']);
+        $hydrator->method('extractValue')->willReturnCallback(function ($name, $value) {
+            if ($name == 'is_hotfix' && $value === true) {
+                return 'IsHotfixExtracted';
+            }
+            if ($name == 'installation_date' && $value == new DateTime('2022-11-03')) {
+                return 'InstallationDateExtracted';
+            }
+        });
+
+        $object = (new ObjectPropertyHydrator())->hydrate($hydrated, new ItemSoftware());
+        $this->assertEquals($extracted, $hydrator->extract($object));
     }
 
     public function hydrateNameProvider()
     {
-        return array(
-            array('name', 'Name'),
-            array('version', 'Version'),
-            array('comments', 'Comment'),
-            array('publisher', 'Publisher'),
-            array('folder', 'InstallLocation'),
-            array('source', 'IsHotfix'),
-            array('guid', 'Guid'),
-            array('language', 'Language'),
-            array('installdate', 'InstallationDate'),
-            array('bitswidth', 'Architecture'),
-            array('filesize', 'Size'),
-        );
+        return [
+            ['name', 'name'],
+            ['version', 'version'],
+            ['comment', 'comment'],
+            ['publisher', 'publisher'],
+            ['install_location', 'installLocation'],
+            ['is_hotfix', 'isHotfix'],
+            ['guid', 'guid'],
+            ['language', 'language'],
+            ['installation_date', 'installationDate'],
+            ['architecture', 'architecture'],
+            ['size', 'size'],
+        ];
     }
 
     /**
@@ -183,32 +244,33 @@ class SoftwareTest extends \PHPUnit_Framework_TestCase
      */
     public function testHydrateName($extracted, $hydrated)
     {
-        $hydrator = new \Database\Hydrator\Software;
+        $hydrator = new \Database\Hydrator\Software();
         $this->assertEquals($hydrated, $hydrator->hydrateName($extracted));
     }
 
     public function testHydrateNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot hydrate name: invalid');
-        $hydrator = new \Database\Hydrator\Software;
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot hydrate name: invalid');
+        $hydrator = new \Database\Hydrator\Software();
         $hydrator->hydrateName('invalid');
     }
 
     public function extractNameProvider()
     {
-        return array(
-            array('Name', 'name'),
-            array('Version', 'version'),
-            array('Comment', 'comments'),
-            array('Publisher', 'publisher'),
-            array('InstallLocation', 'folder'),
-            array('IsHotfix', 'source'),
-            array('Guid', 'guid'),
-            array('Language', 'language'),
-            array('InstallationDate', 'installdate'),
-            array('Architecture', 'bitswidth'),
-            array('Size', 'filesize'),
-        );
+        return [
+            ['name', 'name'],
+            ['version', 'version'],
+            ['comment', 'comment'],
+            ['publisher', 'publisher'],
+            ['installLocation', 'install_location'],
+            ['isHotfix', 'is_hotfix'],
+            ['guid', 'guid'],
+            ['language', 'language'],
+            ['installationDate', 'installation_date'],
+            ['architecture', 'architecture'],
+            ['size', 'size'],
+        ];
     }
 
     /**
@@ -216,34 +278,41 @@ class SoftwareTest extends \PHPUnit_Framework_TestCase
      */
     public function testExtractName($hydrated, $extracted)
     {
-        $hydrator = new \Database\Hydrator\Software;
+        $hydrator = new \Database\Hydrator\Software();
         $this->assertEquals($extracted, $hydrator->extractName($hydrated));
+    }
+
+    public function testExtractNameWithLegacyUpperCaseName()
+    {
+        $hydrator = new Software();
+        $this->assertEquals('is_hotfix', $hydrator->extractName('IsHotfix'));
     }
 
     public function testExtractNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot extract name: Invalid');
-        $hydrator = new \Database\Hydrator\Software;
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot extract name: Invalid');
+        $hydrator = new \Database\Hydrator\Software();
         $hydrator->extractName('Invalid');
     }
 
     public function hydrateValueProvider()
     {
-        return array(
-            array('Name', "\xC2\x99", "\xE2\x84\xA2"),
-            array('InstallLocation', 'N/A', null),
-            array('InstallLocation', 'a/b', 'a\b'),
-            array('IsHotfix', '0', true),
-            array('IsHotfix', '1', false),
-            array('InstallationDate', '2014-12-31', new \DateTime('2014-12-31')),
-            array('InstallationDate', '', null),
-            array('InstallationDate', null, null),
-            array('Architecture', '64', '64'),
-            array('Architecture', '32', '32'),
-            array('Architecture', '0', null),
-            array('Architecture', null, null),
-            array('other', 'value', 'value'),
-        );
+        return [
+            ['name', "\xC2\x99", "\xE2\x84\xA2"],
+            ['installLocation', 'N/A', null],
+            ['installLocation', 'a/b', 'a\b'],
+            ['isHotfix', '0', true],
+            ['isHotfix', '1', false],
+            ['installationDate', '2014-12-31', new DateTime('2014-12-31')],
+            ['installationDate', '', null],
+            ['installationDate', null, null],
+            ['architecture', '64', '64'],
+            ['architecture', '32', '32'],
+            ['architecture', '0', null],
+            ['architecture', null, null],
+            ['other', 'value', 'value'],
+        ];
     }
 
     /**
@@ -251,18 +320,18 @@ class SoftwareTest extends \PHPUnit_Framework_TestCase
      */
     public function testHydrateValue($name, $extracted, $hydrated)
     {
-        $hydrator = new \Database\Hydrator\Software;
+        $hydrator = new \Database\Hydrator\Software();
         $this->assertEquals($hydrated, $hydrator->hydrateValue($name, $extracted));
     }
 
     public function extractValueProvider()
     {
         return array(
-            array('source', true, '0'),
-            array('source', false, '1'),
-            array('installdate', new \DateTime('2014-12-31'), '2014-12-31'),
-            array('installdate', '', null),
-            array('installdate', null, null),
+            array('is_hotfix', true, '0'),
+            array('is_hotfix', false, '1'),
+            array('installation_date', new \DateTime('2014-12-31'), '2014-12-31'),
+            array('installation_date', '', null),
+            array('installation_date', null, null),
             array('other', 'value', 'value'),
         );
     }
@@ -272,7 +341,7 @@ class SoftwareTest extends \PHPUnit_Framework_TestCase
      */
     public function testExtractValue($name, $hydrated, $extracted)
     {
-        $hydrator = new \Database\Hydrator\Software;
+        $hydrator = new \Database\Hydrator\Software();
         $this->assertEquals($extracted, $hydrator->extractValue($name, $hydrated));
     }
 }

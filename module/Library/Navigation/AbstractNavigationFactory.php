@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Abstract navigation factory
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,24 +25,22 @@ namespace Library\Navigation;
 /**
  * Abstract navigation factory
  *
- * This abstract class extends \Zend\Navigation\Service\DefaultNavigationFactory
- * with a more flexible configuration source. Instead of pulling configuration
- * from the "navigation" section of the application config, the configuration is
- * provided by the _getConfig() method which must be implemented by derived
- * classes.
+ * This abstract class extends
+ * \Laminas\Navigation\Service\DefaultNavigationFactory with a more flexible
+ * configuration source. Instead of pulling configuration from the "navigation"
+ * section of the application config, the configuration is provided by the
+ * _getConfig() method which must be implemented by derived classes.
  *
  * @codeCoverageIgnore
  */
-abstract class AbstractNavigationFactory extends \Zend\Navigation\Service\DefaultNavigationFactory
+abstract class AbstractNavigationFactory extends \Laminas\Navigation\Service\DefaultNavigationFactory
 {
-    /**
-     * @internal
-     */
-    protected function getPages(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    /** {@inheritdoc} */
+    protected function getPages(\Interop\Container\ContainerInterface $container)
     {
         if (!$this->pages) {
-            $pages = $this->getPagesFromConfig($this->_getConfig());
-            $this->pages = $this->preparePages($serviceLocator, $pages);
+            $pages = $this->getPagesFromConfig($this->getConfig());
+            $this->pages = $this->preparePages($container, $pages);
         }
         return $this->pages;
     }
@@ -49,23 +48,25 @@ abstract class AbstractNavigationFactory extends \Zend\Navigation\Service\Defaul
     /**
      * Construct navigation config
      *
-     * @return string|\Zend\Config\Config|array Configuration file/object/array
+     * @return string|\Laminas\Config\Config|array Configuration file/object/array
      */
-    abstract protected function _getConfig();
+    abstract protected function getConfig();
 
     /**
      * Translation helper
      *
      * This is a dummy method that can be called by _getConfig() to mark label
      * strings translatable. It does not do anything (it returns the string
-     * unchanged), but using it allows xgettext to detect and extract
-     * translatable strings.
+     * unchanged), but using it allows detection and extraction of translatable
+     * strings.
      *
      * @param string $string Translatable string
      * @return string same as $string
      */
+    // @codingStandardsIgnoreStart
     protected function _($string)
     {
         return $string;
     }
+    // @codingStandardsIgnoreEnd
 }

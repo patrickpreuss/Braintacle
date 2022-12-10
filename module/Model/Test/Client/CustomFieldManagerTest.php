@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Client\CustomFieldManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,15 @@
 
 namespace Model\Test\Client;
 
+use Database\Table\CustomFieldConfig;
+use Database\Table\CustomFields as TableCustomFields;
+use InvalidArgumentException;
+use Laminas\Hydrator\HydratorInterface;
+use Model\Client\CustomFieldManager;
+use Model\Client\CustomFields;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
+
 /**
  * Tests for Model\Client\CustomFieldManager
  */
@@ -32,11 +42,12 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
     public function testGetFields()
     {
         $fieldInfo = array('field' => array('column' => 'column_name', 'type' => 'text'));
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
-        $model = $this->_getModel(array('Database\Table\CustomFieldConfig' => $customFieldConfig));
+
+        $model = new CustomFieldManager($customFieldConfig, static::$serviceManager->get(TableCustomFields::class));
 
         // The second invocation should return a cached result.
         $fields = array('field' => 'text');
@@ -47,11 +58,12 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
     public function testGetColumnMap()
     {
         $fieldInfo = array('field' => array('column' => 'column_name', 'type' => 'text'));
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
-        $model = $this->_getModel(array('Database\Table\CustomFieldConfig' => $customFieldConfig));
+
+        $model = new CustomFieldManager($customFieldConfig, static::$serviceManager->get(TableCustomFields::class));
 
         // The second invocation should return a cached result.
         $fields = array('field' => 'column_name');
@@ -65,10 +77,7 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'ä' => 'text', // Test case-insensitive non-ASCII characters
             'a/+b' => 'text', // Test escaping in regex
         );
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->disableOriginalConstructor()
-                      ->setMethods(array('getFields'))
-                      ->getMock();
+        $model = $this->createPartialMock(CustomFieldManager::class, ['getFields']);
         $model->method('getFields')->willReturn($fields);
         $this->assertTrue($model->fieldExists('Ä'));
         $this->assertTrue($model->fieldExists('a/+b'));
@@ -84,12 +93,15 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'field1' => array('column' => 'column1', 'type' => 'text'),
             'field2' => array('column' => 'column2', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->method('getFields')->will($this->onConsecutiveCalls($fieldInfo1, $fieldInfo2));
         $customFieldConfig->expects($this->once())->method('addField')->with('field2', 'text');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
+
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         $model->getColumnMap(); // Initialize cache
@@ -104,12 +116,14 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
         $fieldInfo = array(
             'field1' => array('column' => 'column1', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->method('getFields')->willReturn($fieldInfo);
         $customFieldConfig->expects($this->never())->method('addField');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         try {
@@ -142,12 +156,15 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             $newName => array('column' => 'column1', 'type' => 'text'),
             'field2' => array('column' => 'column2', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->method('getFields')->will($this->onConsecutiveCalls($fieldInfo1, $fieldInfo2));
         $customFieldConfig->expects($this->once())->method('renameField')->with('field1', $newName);
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
+
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         $model->getColumnMap(); // Initialize cache
@@ -176,12 +193,14 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'TAG' => array('column' => 'tag', 'type' => 'text'),
             'field1' => array('column' => 'column1', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
         $customFieldConfig->expects($this->never())->method('renameField');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         $model->getFields(); // Initialize cache
@@ -203,12 +222,14 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'TAG' => array('column' => 'tag', 'type' => 'text'),
             'field1' => array('column' => 'column1', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
         $customFieldConfig->expects($this->never())->method('renameField');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         $model->getFields(); // Initialize cache
@@ -225,12 +246,14 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'field1' => array('column' => 'column1', 'type' => 'text'),
             'field2' => array('column' => 'column2', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
         $customFieldConfig->expects($this->once())->method('deleteField')->with('field1');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         $model->deleteField('field1');
@@ -256,12 +279,14 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
             'field1' => array('column' => 'column1', 'type' => 'text'),
             'field2' => array('column' => 'column2', 'type' => 'text'),
         );
-        $customFieldConfig = $this->getMockBuilder('Database\Table\CustomFieldConfig')
-                                  ->disableOriginalConstructor()
-                                  ->getMock();
+
+        /** @var MockObject|CustomFieldConfig */
+        $customFieldConfig = $this->createMock('Database\Table\CustomFieldConfig');
         $customFieldConfig->expects($this->once())->method('getFields')->willReturn($fieldInfo);
         $customFieldConfig->expects($this->never())->method('deleteField');
-        $customFields = $this->getMockBuilder('Database\Table\CustomFields')->disableOriginalConstructor()->getMock();
+
+        /** @var Stub|TableCustomFields */
+        $customFields = $this->createStub(TableCustomFields::class);
 
         $model = new \Model\Client\CustomFieldManager($customFieldConfig, $customFields);
         try {
@@ -277,15 +302,12 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
 
     public function testGetHydrator()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->disableOriginalConstructor()
-                      ->setMethods(array('getFields', 'getColumnMap'))
-                      ->getMock();
+        $model = $this->createPartialMock(CustomFieldManager::class, ['getFields', 'getColumnMap']);
         $model->method('getFields')->willReturn(array('TAG' => 'text', 'Date' => 'date'));
         $model->method('getColumnMap')->willReturn(array('TAG' => 'tag', 'Date' => 'fields_2'));
 
         $hydrator = $model->getHydrator();
-        $this->assertInstanceOf('Zend\Stdlib\Hydrator\ArraySerializable', $hydrator);
+        $this->assertInstanceOf(\Laminas\Hydrator\ArraySerializableHydrator::class, $hydrator);
 
         $namingStrategy = $hydrator->getNamingStrategy();
         $this->assertInstanceOf('Database\Hydrator\NamingStrategy\MapNamingStrategy', $namingStrategy);
@@ -295,10 +317,12 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
         $this->assertEquals('fields_2', $namingStrategy->extract('Date'));
 
         $this->assertInstanceOf(
-            'Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy', $hydrator->getStrategy('Date')
+            'Laminas\Hydrator\Strategy\DateTimeFormatterStrategy',
+            $hydrator->getStrategy('Date')
         );
         $this->assertInstanceOf(
-            'Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy', $hydrator->getStrategy('fields_2')
+            'Laminas\Hydrator\Strategy\DateTimeFormatterStrategy',
+            $hydrator->getStrategy('fields_2')
         );
 
         $this->assertFalse($hydrator->hasStrategy('TAG'));
@@ -307,67 +331,78 @@ class CustomFieldManagerTest extends \Model\Test\AbstractTest
 
     public function testRead()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setConstructorArgs(
-                          array(
-                              \Library\Application::getService('Database\Table\CustomFieldConfig'),
-                              \Library\Application::getService('Database\Table\CustomFields'),
-                          )
-                      )
-                      ->setMethods(array('getFields', 'getColumnMap'))
-                      ->getMock();
-        $model->method('getFields')->willReturn(array('TAG' => 'text'));
-        $model->method('getColumnMap')->willReturn(array('TAG' => 'tag'));
+        $columnMap = ['hydrated_name' => 'raw_name'];
 
-        // Add a simple strategy to test hydration of values
-        $model->getHydrator()->addStrategy('TAG', new \Zend\Stdlib\Hydrator\Strategy\ExplodeStrategy);
+        $customFields = $this->createStub(CustomFields::class);
 
-        $fields = $model->read(2);
-        $this->assertInstanceOf('Model\Client\CustomFields', $fields);
-        $this->assertEquals(array('TAG' => array('Custom2')), $fields->getArrayCopy());
-        $fields = $model->read(1);
-        $this->assertInstanceOf('Model\Client\CustomFields', $fields);
-        $this->assertEquals(array('TAG' => array('Custom1')), $fields->getArrayCopy());
+        $hydrator = $this->createMock(HydratorInterface::class);
+        $hydrator->method('hydrate')
+                 ->with(['raw_name' => 'raw_value'], $this->isInstanceOf(CustomFields::class))
+                 ->willReturn($customFields);
+
+        $model = $this->createPartialMock(CustomFieldManager::class, ['getColumnMap', 'readRaw', 'getHydrator']);
+        $model->method('getColumnMap')->willReturn($columnMap);
+        $model->method('readRaw')->with(42, ['raw_name'])->willReturn(['raw_name' => 'raw_value']);
+        $model->method('getHydrator')->willReturn($hydrator);
+
+        $this->assertSame($customFields, $model->read('42'));
     }
 
-    public function testReadInvalidId()
+    public function testReadRaw()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setConstructorArgs(
-                          array(
-                              \Library\Application::getService('Database\Table\CustomFieldConfig'),
-                              \Library\Application::getService('Database\Table\CustomFields'),
-                          )
-                      )
-                      ->setMethods(array('getFields', 'getColumnMap'))
-                      ->getMock();
-        $model->method('getFields')->willReturn(array('TAG' => 'text'));
-        $model->method('getColumnMap')->willReturn(array('TAG' => 'tag'));
+        $model = new CustomFieldManager(
+            static::$serviceManager->get('Database\Table\CustomFieldConfig'),
+            static::$serviceManager->get('Database\Table\CustomFields'),
+        );
 
-        $this->setExpectedException('RuntimeException', 'Invalid client ID: 42');
-        $model->read(42);
+        $this->assertEquals(['tag' => 'Custom1'], $model->readRaw('1', ['tag']));
     }
 
-    public function testWrite()
+    public function testReadRawInvalidId()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setConstructorArgs(
-                          array(
-                              \Library\Application::getService('Database\Table\CustomFieldConfig'),
-                              \Library\Application::getService('Database\Table\CustomFields'),
-                          )
-                      )
-                      ->setMethods(array('getFields', 'getColumnMap'))
-                      ->getMock();
-        $model->method('getFields')->willReturn(array('TAG' => 'text'));
-        $model->method('getColumnMap')->willReturn(array('TAG' => 'tag'));
+        $model = new CustomFieldManager(
+            static::$serviceManager->get('Database\Table\CustomFieldConfig'),
+            static::$serviceManager->get('Database\Table\CustomFields'),
+        );
 
-        // Add a simple strategy to test extraction of values
-        $model->getHydrator()->addStrategy('tag', new \Zend\Stdlib\Hydrator\Strategy\BooleanStrategy('new_value', ''));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid client ID: 42');
+        $model->readRaw(42, ['tag']);
+    }
 
-        $model->write(2, array('TAG' => true));
+    public function writeProvider()
+    {
+        return [
+            [new CustomFields(['hydrated_name' => 'hydrated_value'])],
+            [['hydrated_name' => 'hydrated_value']],
+        ];
+    }
+
+    /** @dataProvider writeProvider */
+    public function testWrite($data)
+    {
+        $hydrator = $this->createMock(HydratorInterface::class);
+        $hydrator->method('extract')->with($this->callback(function ($data) {
+            return $data instanceof CustomFields and $data->getArrayCopy() == ['hydrated_name' => 'hydrated_value'];
+        }))->willReturn(['raw_name' => 'raw_value']);
+
+        $model = $this->createPartialMock(CustomFieldManager::class, ['getHydrator', 'writeRaw']);
+        $model->method('getHydrator')->willReturn($hydrator);
+        $model->expects($this->once())->method('writeRaw')->with(42, ['raw_name' => 'raw_value']);
+
+        $model->write('42', $data);
+    }
+
+    public function testWriteRaw()
+    {
+        $model = new CustomFieldManager(
+            static::$serviceManager->get('Database\Table\CustomFieldConfig'),
+            static::$serviceManager->get('Database\Table\CustomFields'),
+        );
+
+        $model->writeRaw('2', ['tag' => 'new_value']);
         $this->assertTablesEqual(
-            $this->_loadDataset('Write')->getTable('accountinfo'),
+            $this->loadDataSet('WriteRaw')->getTable('accountinfo'),
             $this->getConnection()->createQueryTable('accountinfo', 'SELECT hardware_id, tag FROM accountinfo')
         );
     }

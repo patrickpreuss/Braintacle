@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Client item manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Model\Client;
+
+use Laminas\Db\ResultSet\AbstractResultSet;
 
 /**
  * Client item manager
@@ -73,16 +76,16 @@ class ItemManager
 
     /**
      * Service manager
-     * @var \Zend\ServiceManager\ServiceManager
+     * @var \Laminas\ServiceManager\ServiceManager
      */
     protected $_serviceManager;
 
     /**
      * Constructor
      *
-     * @param \Zend\ServiceManager\ServiceManager $serviceManager
+     * @param \Laminas\ServiceManager\ServiceManager $serviceManager
      */
-    public function __construct(\Zend\ServiceManager\ServiceManager $serviceManager)
+    public function __construct(\Laminas\ServiceManager\ServiceManager $serviceManager)
     {
         $this->_serviceManager = $serviceManager;
     }
@@ -131,10 +134,13 @@ class ItemManager
      * @param array $filters Filters, handled by plugin. Default: no filters
      * @param string $order Property to sort by, handled by plugin.
      * @param string $direction One of asc|desc. Default: asc
-     * @return \Zend\Db\ResultSet\AbstractResultSet
      */
-    public function getItems($type, $filters=null, $order=null, $direction='asc')
-    {
+    public function getItems(
+        string $type,
+        array $filters = null,
+        string $order = null,
+        ?string $direction = 'asc'
+    ): AbstractResultSet {
         $type = strtolower($type);
         $table = $this->getTable($type);
 
@@ -147,7 +153,7 @@ class ItemManager
         $plugin->columns();
         $plugin->join();
         $plugin->where($filters);
-        $plugin->order($order, $direction);
+        $plugin->order($order, $direction ?? 'asc');
 
         return $plugin->select();
     }

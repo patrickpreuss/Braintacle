@@ -1,0 +1,9 @@
+operators:
+  -
+    id: "user1"
+    passwd: "new_hash"
+    password_version: 1
+  -
+    id: "user2"
+    passwd: "hash2"
+    password_version: 1

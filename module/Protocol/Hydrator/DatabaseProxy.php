@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator that proxies to a database hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -32,30 +33,28 @@ namespace Protocol\Hydrator;
  * conversion. It covers almost every use case except date/timestamp columns
  * where the XML document uses various non-ISO formats.
  */
-class DatabaseProxy implements \Zend\Stdlib\Hydrator\HydratorInterface
+class DatabaseProxy implements \Laminas\Hydrator\HydratorInterface
 {
     /**
      * Proxied hydrator
-     * @var \Zend\Stdlib\Hydrator\HydratorInterface
+     * @var \Laminas\Hydrator\HydratorInterface
      */
     protected $_hydrator;
 
     /**
      * Constructor
      *
-     * @param \Zend\Stdlib\Hydrator\HydratorInterface $hydrator
+     * @param \Laminas\Hydrator\HydratorInterface $hydrator
      */
-    public function __construct(\Zend\Stdlib\Hydrator\HydratorInterface $hydrator)
+    public function __construct(\Laminas\Hydrator\HydratorInterface $hydrator)
     {
         $this->_hydrator = $hydrator;
     }
 
     /**
      * Return attached hydrator
-     *
-     * @return \Zend\Stdlib\Hydrator\HydratorInterface
      */
-    public function getHydrator()
+    public function getHydrator(): \Laminas\Hydrator\HydratorInterface
     {
         return $this->_hydrator;
     }
@@ -67,7 +66,7 @@ class DatabaseProxy implements \Zend\Stdlib\Hydrator\HydratorInterface
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
         return array_change_key_case($this->_hydrator->extract($object), CASE_UPPER);
     }

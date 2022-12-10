@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Replacement for \SplFileObject
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Library;
+
+use ReturnTypeWillChange;
 
 /**
  * Replacement for \SplFileObject
@@ -72,7 +75,7 @@ class FileObject extends \SplFileInfo implements \Iterator
      * @param string $filename
      * @param string $openMode
      */
-    public function __construct($filename, $openMode='r')
+    public function __construct($filename, $openMode = 'r')
     {
         $this->_file = @fopen($filename, $openMode);
         if (!$this->_file) {
@@ -92,6 +95,16 @@ class FileObject extends \SplFileInfo implements \Iterator
     }
 
     /**
+     * Return underlying stream resource.
+     *
+     * @return resource
+     */
+    public function getStreamResource()
+    {
+        return $this->_file;
+    }
+
+    /**
      * Set flags
      *
      * @param integer $flags Any of the \SplFileObject constants
@@ -103,6 +116,16 @@ class FileObject extends \SplFileInfo implements \Iterator
             throw new \LogicException('READ_CSV not implemented');
         }
         $this->_flags = $flags;
+    }
+
+    /**
+     * Get flags set via setFlags()
+     *
+     * @return integer
+     */
+    public function getFlags()
+    {
+        return $this->_flags;
     }
 
     /**
@@ -162,8 +185,9 @@ class FileObject extends \SplFileInfo implements \Iterator
     /**
      * Get current iterator line
      *
-     * @return string
+     * @return string|false
      */
+    #[ReturnTypeWillChange]
     public function current()
     {
         if ($this->_currentKey == -1) {
@@ -174,10 +198,8 @@ class FileObject extends \SplFileInfo implements \Iterator
 
     /**
      * Get current iterator line number
-     *
-     * @return integer
      */
-    public function key()
+    public function key(): int
     {
         return $this->_currentKey;
     }
@@ -187,7 +209,7 @@ class FileObject extends \SplFileInfo implements \Iterator
      *
      * @throws \RuntimeException if an error occurs
      */
-    public function next()
+    public function next(): void
     {
         try {
             $this->_currentLine = $this->fgets();
@@ -211,7 +233,7 @@ class FileObject extends \SplFileInfo implements \Iterator
      *
      * @throws \RuntimeException if an error occurs
      */
-    public function rewind()
+    public function rewind(): void
     {
         if (!@rewind($this->_file)) {
             throw new \RuntimeException('Error rewinding file ' . $this->getPathname());
@@ -222,10 +244,8 @@ class FileObject extends \SplFileInfo implements \Iterator
 
     /**
      * Return iterator status
-     *
-     * @return bool
      */
-    public function valid()
+    public function valid(): bool
     {
         return $this->_iteratorValid;
     }
@@ -247,120 +267,6 @@ class FileObject extends \SplFileInfo implements \Iterator
             throw new \RuntimeException("Error reading from file $filename");
         } else {
             return $content;
-        }
-    }
-
-    /**
-     * Reads entire file into an array
-     *
-     * This is a wrapper for \file() which throws an exception when an error is
-     * encountered.
-     *
-     * @param string $filename Name of the file to read
-     * @param integer $flags Flags for \file()
-     * @return string[] File content
-     * @throws \RuntimeException if an error occurs during reading.
-     */
-    public static function fileGetContentsAsArray($filename, $flags=0)
-    {
-        $content = @file($filename, $flags);
-        if ($content === false) {
-            throw new \RuntimeException("Error reading from file $filename");
-        } else {
-            return $content;
-        }
-    }
-
-    /**
-     * Write a string to a file
-     *
-     * This is a wrapper for \file_put_contents() which throws an exception when
-     * an error is encountered. A truncated file may remain on disk.
-     *
-     * @param string $filename Name of the file to write to
-     * @param string $content File content
-     * @throws \RuntimeException if an error occurs during writing.
-     */
-    public static function filePutContents($filename, $content)
-    {
-        $result = @file_put_contents($filename, $content);
-        if ($result === false) {
-            throw new \RuntimeException("Error writing to file $filename");
-        }
-    }
-
-    /**
-     * Copy a file or directory
-     *
-     * Existing files are overwritten. Directories can neither be copied nor
-     * overwritten. This is the same behavior as PHP's copy().
-     *
-     * @param string $oldName Existing filename/directory
-     * @param string $newName New filename/directory
-     * @throws \RuntimeException if an error occurs
-     */
-    public static function copy($oldName, $newName)
-    {
-         if (!@copy($oldName, $newName)) {
-            throw new \RuntimeException("Error copying '$oldName' to '$newName'");
-         }
-    }
-
-    /**
-     * Rename/move a file or directory
-     *
-     * Existing targets are overwritten regardless of type. This is the same
-     * behavior as PHP's rename().
-     *
-     * @param string $oldName Existing filename/directory
-     * @param string $newName New filename/directory
-     * @throws \RuntimeException if an error occurs
-     */
-    public static function rename($oldName, $newName)
-    {
-         if (!@rename($oldName, $newName)) {
-            throw new \RuntimeException("Error renaming '$oldName' to '$newName'");
-         }
-    }
-
-    /**
-     * Delete a file
-     *
-     * @param $filename file to delete
-     * @throws \RuntimeException if an error occurs
-     */
-    public static function unlink($filename)
-    {
-        if (!@unlink($filename)) {
-            throw new \RuntimeException("Error deleting file '$filename'");
-        }
-    }
-
-    /**
-     * Create a directory
-     *
-     * @param string $pathname Path to create
-     * @throws \RuntimeException if a filesystem object with the same name exists or an error occurs
-     */
-    public static function mkdir($pathname)
-    {
-        if (file_exists($pathname)) {
-            throw new \RuntimeException("Error creating directory '$pathname': path exists");
-        } elseif (!@mkdir($pathname)) {
-            throw new \RuntimeException("Error creating directory '$pathname'");
-        }
-    }
-
-    /**
-     * Remove a nonempty directory
-     *
-     * @param string $dirname Directory to remove
-     * @throws \RuntimeException if an error occurs
-     */
-    public static function rmdir($dirname)
-    {
-        if (!@rmdir($dirname)) {
-            throw new \RuntimeException("Error removing directory '$dirname'");
         }
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Service for generating random values
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,20 +25,16 @@ namespace Library;
 /**
  * Service for generating random values
  *
- * This is a wrapper for various builtin random value generator functions. It
- * has the advantage of being replaceable by a mock object that generates
- * predictable values for testing.
+ * This is a wrapper for \Laminas\Math\Rand. It has the advantage of being
+ * available as the Library\Random service which can be replaced by a mock
+ * object that generates predictable values for testing.
  *
- * **WARNING: the implemented methods are not cryptographically secure and must
- * not be used where strong randomness is critical!**
+ * The random generator functions are considered cryptographically secure.
  */
 class Random
 {
     /**
      * Generate random integer value
-     *
-     * Generates an integer value via mt_rand(). See the PHP documentation for
-     * characteristics of the random number generator.
      *
      * @param integer $min lowest value to be returned
      * @param integer $max highest value to be returned
@@ -45,6 +42,6 @@ class Random
      */
     public function getInteger($min, $max)
     {
-        return mt_rand($min, $max);
+        return \Laminas\Math\Rand::getInteger($min, $max);
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator for filesystems
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,12 +28,13 @@ namespace Database\Hydrator;
  * Sanitizes incompatible structures produced by different agents and calculates
  * UsedSpace property on hydration.
  */
-class Filesystems implements \Zend\Stdlib\Hydrator\HydratorInterface
+class Filesystems implements \Laminas\Hydrator\HydratorInterface
 {
     /**
      * Map for hydrateName()
      *
-     * Names that cannot be hydrated unambigously are not provided. 
+     * Names that cannot be hydrated unambigously are not provided.
+     *
      * @var string[]
      */
     protected $_hydratorMap = array(
@@ -62,45 +64,44 @@ class Filesystems implements \Zend\Stdlib\Hydrator\HydratorInterface
     /** {@inheritdoc} */
     public function hydrate(array $data, $object)
     {
-        $object->exchangeArray(array());
         if ($data['letter']) {
             // Windows
-            $object['Letter'] = $this->hydrateValue('Letter', $data['letter']);
-            $object['Type'] = $data['type'];
-            $object['Label'] = $data['volumn'];
+            $object->Letter = $this->hydrateValue('Letter', $data['letter']);
+            $object->Type = $data['type'];
+            $object->Label = $data['volumn'];
         } else {
             // UNIX
-            $object['Mountpoint'] = $data['type'];
-            $object['Device'] = $data['volumn'];
-            $object['CreationDate'] = $this->hydrateValue('CreationDate', $data['createdate']);
+            $object->Mountpoint = $data['type'];
+            $object->Device = $data['volumn'];
+            $object->CreationDate = $this->hydrateValue('CreationDate', $data['createdate']);
         }
-        $object['Filesystem'] = $data['filesystem'];
-        $object['Size'] = $data['total'];
-        $object['FreeSpace'] = $data['free'];
-        $object['UsedSpace'] = $data['total'] - $data['free'];
+        $object->Filesystem = $data['filesystem'];
+        $object->Size = $data['total'];
+        $object->FreeSpace = $data['free'];
+        $object->UsedSpace = $data['total'] - $data['free'];
         return $object;
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
         $data = array();
-        if (isset($object['Letter'])) {
+        if (isset($object->Letter)) {
             // Windows
-            $data['letter'] = $this->extractValue('letter', $object['Letter']);
-            $data['type'] = $object['Type'];
-            $data['volumn'] = $object['Label'];
+            $data['letter'] = $this->extractValue('letter', $object->Letter);
+            $data['type'] = $object->Type;
+            $data['volumn'] = $object->Label;
             $data['createdate'] = null;
         } else {
             // UNIX
             $data['letter'] = null;
-            $data['type'] = $object['Mountpoint'];
-            $data['volumn'] = $object['Device'];
-            $data['createdate'] = $this->extractValue('createdate', $object['CreationDate']);
+            $data['type'] = $object->Mountpoint;
+            $data['volumn'] = $object->Device;
+            $data['createdate'] = $this->extractValue('createdate', $object->CreationDate);
         }
-        $data['filesystem'] = $object['Filesystem'];
-        $data['total'] = $object['Size'];
-        $data['free'] = $object['FreeSpace'];
+        $data['filesystem'] = $object->Filesystem;
+        $data['total'] = $object->Size;
+        $data['free'] = $object->FreeSpace;
         return $data;
     }
 
@@ -167,12 +168,8 @@ class Filesystems implements \Zend\Stdlib\Hydrator\HydratorInterface
 
     /**
      * Extract value
-     *
-     * @param string $name
-     * @param string $value
-     * @return mixed
      */
-    public function extractValue($name, $value)
+    public function extractValue(string $name, $value)
     {
         if ($name == 'createdate') {
             $value = ($value ? $value->format('Y-m-d') : null);

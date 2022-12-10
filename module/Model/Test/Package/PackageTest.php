@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Package\Package
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -25,20 +26,20 @@ class PackageTest extends \Model\Test\AbstractTest
 {
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testExchangeArrayWithId()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->exchangeArray(array('Id' => '1425211367'));
-        $this->assertEquals(new \DateTime('2015-03-01 13:02:47'), $model['Timestamp']);
+        $this->assertEquals(new \DateTime('2015-03-01 13:02:47'), $model->Timestamp);
     }
 
     public function testExchangeArrayWithoutId()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->exchangeArray(array('Name' => 'name'));
-        $this->assertEquals('name', $model['Name']);
+        $this->assertEquals('name', $model->Name);
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Group\Group
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,17 @@
  */
 
 namespace Model\Test\Group;
+
+use Database\Table\GroupMemberships;
+use Laminas\Db\Adapter\Driver\ConnectionInterface;
+use Laminas\Db\Adapter\Driver\DriverInterface;
+use Laminas\Db\Adapter\Platform\AbstractPlatform;
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Library\Random;
+use Model\Client\ClientManager;
+use Model\Group\Group;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 class GroupTest extends AbstractGroupTest
 {
@@ -46,9 +58,9 @@ class GroupTest extends AbstractGroupTest
      */
     public function testGetDefaultConfig($option, $expectedValue, $globalOptionName, $globalOptionValue)
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->expects($this->once())->method('__get')->with($globalOptionName)->willReturn($globalOptionValue);
-        $model = $this->_getModel(array('Model\Config' => $config));
+        $model = $this->getModel(array('Model\Config' => $config));
         $this->assertSame($expectedValue, $model->getDefaultConfig($option));
     }
 
@@ -65,7 +77,7 @@ class GroupTest extends AbstractGroupTest
      */
     public function testSetMembersFromQuery($type, $simulateLockFailure, $dataSet)
     {
-        $clientManager = $this->getMock('Model\Client\ClientManager');
+        $clientManager = $this->createMock(ClientManager::class);
         $clientManager->expects($this->once())
                       ->method('getClients')
                       ->with(
@@ -81,22 +93,20 @@ class GroupTest extends AbstractGroupTest
                           true
                       )->willReturn(array(array('Id' => 1), array('Id' => 2), array('Id' => 3), array('Id' => 5)));
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
-                       ->will(
-                           $this->returnValueMap(
-                               array(
-                                   array('Model\Client\ClientManager', true, $clientManager),
-                                   array(
-                                       'Database\Table\GroupMemberships',
-                                       true,
-                                       \Library\Application::getService('Database\Table\GroupMemberships')
-                                   )
-                               )
+                       ->willReturnMap(
+                           array(
+                                array('Model\Client\ClientManager', $clientManager),
+                                array(
+                                    'Database\Table\GroupMemberships',
+                                    static::$serviceManager->get('Database\Table\GroupMemberships')
+                                )
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('lock', 'unlock'))->getMock();
+        $model = $this->createPartialMock(Group::class, ['lock', 'unlock']);
         if ($simulateLockFailure) {
             $model->expects($this->exactly(2))
                   ->method('lock')
@@ -110,59 +120,58 @@ class GroupTest extends AbstractGroupTest
 
         $model->setMembersFromQuery($type, 'filter', 'search', 'operator', 'invert');
         $this->assertTablesEqual(
-            $this->_loadDataSet($dataSet)->getTable('groups_cache'),
+            $this->loadDataSet($dataSet)->getTable('groups_cache'),
             $this->getConnection()->createQueryTable(
-                'groups_cache', 'SELECT hardware_id, group_id, static FROM groups_cache ORDER BY group_id, hardware_id'
+                'groups_cache',
+                'SELECT hardware_id, group_id, static FROM groups_cache ORDER BY group_id, hardware_id'
             )
         );
     }
 
     public function testSetMembersFromQueryExceptionInTransaction()
     {
-        $clientManager = $this->getMock('Model\Client\ClientManager');
+        $clientManager = $this->createMock('Model\Client\ClientManager');
         $clientManager->method('getClients')->willReturn(array(array('Id' => 1)));
 
-        $connection = $this->getMock('Zend\Db\Adapter\Driver\AbstractConnection');
+        $connection = $this->createMock(ConnectionInterface::class);
         $connection->expects($this->once())->method('beginTransaction');
         $connection->expects($this->once())->method('rollback');
         $connection->expects($this->never())->method('commit');
 
-        $driver = $this->getMockBuilder('Zend\Db\Adapter\Driver\Pdo\Pdo')->disableOriginalConstructor()->getMock();
+        $driver = $this->createMock(DriverInterface::class);
         $driver->method('getConnection')->willReturn($connection);
-        $adapter = $this->getMockBuilder('Zend\Db\Adapter\Adapter')->disableOriginalConstructor()->getMock();
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
         $adapter->method('getDriver')->willReturn($driver);
 
-        $select = $this->getMock('Zend\Db\Sql\Select');
+        $select = $this->createMock('Laminas\Db\Sql\Select');
         $select->method('columns')->will($this->returnSelf());
-        $sql = $this->getMockBuilder('Zend\Db\Sql\Sql')->disableOriginalConstructor()->getMock();
+        $sql = $this->createMock('Laminas\Db\Sql\Sql');
         $sql->method('select')->willReturn($select);
 
-        $groupMemberships = $this->getMockBuilder('Database\Table\GroupMemberships')
-                                 ->disableOriginalConstructor()
-                                 ->getMock();
+        $groupMemberships = $this->createMock(GroupMemberships::class);
         $groupMemberships->method('getAdapter')->willReturn($adapter);
         $groupMemberships->method('getSql')->willReturn($sql);
         $groupMemberships->method('selectWith')->willReturn(array());
         $groupMemberships->method('insert')->will($this->throwException(new \RuntimeException('test')));
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
-                       ->will(
-                           $this->returnValueMap(
-                               array(
-                                   array('Model\Client\ClientManager', true, $clientManager),
-                                   array('Database\Table\GroupMemberships', true, $groupMemberships)
-                               )
+                       ->willReturnMap(
+                           array(
+                                array('Model\Client\ClientManager', $clientManager),
+                                array('Database\Table\GroupMemberships', $groupMemberships)
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('lock', 'unlock'))->getMock();
+        $model = $this->createPartialMock(Group::class, ['lock', 'unlock']);
         $model->expects($this->once())->method('lock')->willReturn(true);
         $model->expects($this->once())->method('unlock');
         $model['Id'] = 10;
         $model->setServiceLocator($serviceManager);
 
-        $this->setExpectedException('RuntimeException', 'test');
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test');
         $model->setMembersFromQuery(\Model\Client\Client::MEMBERSHIP_ALWAYS, 'filter', 'search', 'operator', 'invert');
     }
 
@@ -179,25 +188,25 @@ class GroupTest extends AbstractGroupTest
      */
     public function testSetMembersFromQueryDynamic($joins)
     {
-        $platform = $this->getMockForAbstractClass('Zend\Db\Adapter\Platform\AbstractPlatform');
+        /** @var MockObject|AbstractPlatform */
+        $platform = $this->createStub(AbstractPlatform::class);
+        $platform->method('getName')->willReturn('platform');
 
-        $adapter = $this->getMockBuilder('Zend\Db\Adapter\Adapter')->disableOriginalConstructor()->getMock();
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
         $adapter->method('getPlatform')->willReturn($platform);
 
-        $select = $this->getMock('Zend\Db\Sql\Select');
+        $select = $this->createMock('Laminas\Db\Sql\Select');
         $select->expects($this->exactly(2))
                ->method('getRawState')
-               ->will(
-                   $this->returnValueMap(
-                       array(
-                           array(\Zend\Db\Sql\Select::COLUMNS, array('id')),
-                           array(\Zend\Db\Sql\Select::JOINS, $joins),
-                       )
+               ->willReturnMap(
+                   array(
+                        array(\Laminas\Db\Sql\Select::COLUMNS, array('id')),
+                        array(\Laminas\Db\Sql\Select::JOINS, $joins),
                    )
                );
         $select->method('getSqlString')->with($platform)->willReturn('query_new');
 
-        $clientManager = $this->getMock('Model\Client\ClientManager');
+        $clientManager = $this->createMock(ClientManager::class);
         $clientManager->expects($this->once())
                       ->method('getClients')
                       ->with(
@@ -213,39 +222,41 @@ class GroupTest extends AbstractGroupTest
                           false
                       )->willReturn($select);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
-                       ->will(
-                           $this->returnValueMap(
-                               array(
-                                   array('Db', true, $adapter),
-                                   array('Model\Client\ClientManager', true, $clientManager),
-                                   array('Database\Table\GroupInfo', true, $this->_groupInfo
-                                   )
-                               )
-                           )
+                       ->willReturnMap(
+                           array(
+                                array('Db', $adapter),
+                                array('Model\Client\ClientManager', $clientManager),
+                                array('Database\Table\GroupInfo', $this->_groupInfo
+                                )
+                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('update'))->getMock();
+        $model = $this->createPartialMock(Group::class, ['update']);
         $model->expects($this->once())
               ->method('update')
               ->with(true)
-              ->willReturnCallback(
-                  function() use ($model) {
-                      // Verify that value is set before update() gets called
-                      $this->assertEquals('query_new', $model['DynamicMembersSql']);
-                  }
-              );
+              ->willReturnCallback(function () use ($model) {
+                  // Verify that value is set before update() gets called
+                  $this->assertEquals('query_new', $model['DynamicMembersSql']);
+              });
         $model['Id'] = 10;
         $model->setServiceLocator($serviceManager);
 
         $model->setMembersFromQuery(
-            \Model\Client\Client::MEMBERSHIP_AUTOMATIC, 'filter', 'search', 'operator', 'invert'
+            \Model\Client\Client::MEMBERSHIP_AUTOMATIC,
+            'filter',
+            'search',
+            'operator',
+            'invert'
         );
         $this->assertTablesEqual(
-            $this->_loadDataSet('SetMembersFromQueryDynamic')->getTable('groups'),
+            $this->loadDataSet('SetMembersFromQueryDynamic')->getTable('groups'),
             $this->getConnection()->createQueryTable(
-                'groups', 'SELECT hardware_id, request FROM groups ORDER BY hardware_id'
+                'groups',
+                'SELECT hardware_id, request FROM groups ORDER BY hardware_id'
             )
         );
     }
@@ -256,28 +267,33 @@ class GroupTest extends AbstractGroupTest
             array('columns' => array()),
             array('columns' => array('name')),
         );
-        $select = $this->getMock('Zend\Db\Sql\Select');
+        $select = $this->createMock('Laminas\Db\Sql\Select');
         $select->expects($this->exactly(2))
                ->method('getRawState')
                ->will(
                    $this->returnValueMap(
                        array(
-                           array(\Zend\Db\Sql\Select::COLUMNS, array('id')),
-                           array(\Zend\Db\Sql\Select::JOINS, $joins),
+                           array(\Laminas\Db\Sql\Select::COLUMNS, array('id')),
+                           array(\Laminas\Db\Sql\Select::JOINS, $joins),
                        )
                    )
                );
         $select->expects($this->never())->method('getSqlString');
 
-        $clientManager = $this->getMock('Model\Client\ClientManager');
+        $clientManager = $this->createMock('Model\Client\ClientManager');
         $clientManager->method('getClients')->willReturn($select);
 
-        $model = $this->_getModel(array('Model\Client\ClientManager' => $clientManager));
-        $model['Id'] = 10;
+        $model = $this->getModel(array('Model\Client\ClientManager' => $clientManager));
+        $model->id = 10;
 
-        $this->setExpectedException('LogicException', 'Expected 1 column, got 2');
+        $this->expectException('LogicException');
+        $this->expectExceptionMessage('Expected 1 column, got 2');
         $model->setMembersFromQuery(
-            \Model\Client\Client::MEMBERSHIP_AUTOMATIC, 'filter', 'search', 'operator', 'invert'
+            \Model\Client\Client::MEMBERSHIP_AUTOMATIC,
+            'filter',
+            'search',
+            'operator',
+            'invert'
         );
     }
 
@@ -299,10 +315,10 @@ class GroupTest extends AbstractGroupTest
     {
         $now = new \DateTime('2015-07-23 20:20:00');
 
-        $random = $this->getMock('Library\Random');
+        $random = $this->createMock(Random::class);
         $random->method('getInteger')->willReturn(42);
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('__get')->will(
             $this->returnValueMap(
                 array(
@@ -312,32 +328,27 @@ class GroupTest extends AbstractGroupTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')
-                       ->will(
-                           $this->returnValueMap(
-                               array(
-                                   array(
-                                       'Database\Table\Clients',
-                                       true,
-                                       \Library\Application::getService('Database\Table\Clients')
-                                   ),
-                                   array(
-                                       'Database\Table\GroupInfo', true, $this->_groupInfo
-                                   ),
-                                   array(
-                                       'Database\Table\GroupMemberships',
-                                       true,
-                                       \Library\Application::getService('Database\Table\GroupMemberships')
-                                   ),
-                                   array('Library\Now', true, $now),
-                                   array('Library\Random', true, $random),
-                                   array('Model\Config', true, $config),
-                               )
+                       ->willReturnMap(
+                           array(
+                                array(
+                                    'Database\Table\Clients',
+                                    static::$serviceManager->get('Database\Table\Clients')
+                                ),
+                                array('Database\Table\GroupInfo', $this->_groupInfo),
+                                array(
+                                    'Database\Table\GroupMemberships',
+                                    static::$serviceManager->get('Database\Table\GroupMemberships')
+                                ),
+                                array('Library\Now', $now),
+                                array('Library\Random', $random),
+                                array('Model\Config', $config),
                            )
                        );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('lock', 'unlock'))->getMock();
+        $model = $this->createPartialMock(Group::class, ['lock', 'unlock']);
         $model->method('lock')->willReturn($lockSuccess);
         if ($dataSet !== null) {
             $model->expects($this->once())->method('unlock');
@@ -360,24 +371,25 @@ class GroupTest extends AbstractGroupTest
             $model['CacheExpirationDate']
         );
         $this->assertTablesEqual(
-            $this->_loadDataSet($dataSet)->getTable('groups'),
+            $this->loadDataSet($dataSet)->getTable('groups'),
             $this->getConnection()->createQueryTable(
-                'groups', 'SELECT hardware_id, request, create_time, revalidate_from FROM groups ORDER BY hardware_id'
+                'groups',
+                'SELECT hardware_id, request, create_time, revalidate_from FROM groups ORDER BY hardware_id'
             )
         );
     }
 
     public function testGetPackagesDefaultOrder()
     {
-        $model = $this->_getModel();
-        $model['Id'] = 10;
+        $model = $this->getModel();
+        $model->id = 10;
         $this->assertEquals(array('package1', 'package2'), $model->getPackages());
     }
 
     public function testGetPackagesReverseOrder()
     {
-        $model = $this->_getModel();
-        $model['Id'] = 10;
+        $model = $this->getModel();
+        $model->id = 10;
         $this->assertEquals(array('package2', 'package1'), $model->getPackages('desc'));
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Network\SubnetManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,12 @@
 
 namespace Model\Test\Network;
 
+use Database\Table\Subnets;
+use InvalidArgumentException;
+use Library\Validator\IpNetworkAddress;
+use Model\Network\SubnetManager;
+use PHPUnit\Framework\MockObject\MockObject;
+
 /**
  * Tests for Model\Network\SubnetManager
  */
@@ -35,70 +42,129 @@ class SubnetManagerTest extends \Model\Test\AbstractTest
         'Subnets',
     );
 
-    public function invalidArgumentsProvider()
+    public function testGetSubnetsFullByCidrAddress()
     {
-        return array(
-            array('192.0.2.0', '2001:db8::', 'Not an IPv4 mask'),
-            array('2001:db8::', '255.255.255.128', 'Not an IPv4 address'),
-            array('192.0.2.0', null, 'Not an IPv4 mask'),
-            array('192.0.2.0', '', 'Not an IPv4 mask'),
-            array(null, '255.255.255.128', 'Not an IPv4 address'),
-            array('', '255.255.255.128', 'Not an IPv4 address'),
-            array('abc', '255.255.255.0', 'Not an IPv4 address'),
-            array('192.0.2.0', '0.0.0.0.0', 'Not an IPv4 mask'),
-            array('192.0.2.0', '255.0.255.0', 'Not an IPv4 mask'),
-            array('192.0.2.0', '0.255.255.0', 'Not an IPv4 mask'),
+        $model = $this->getModel();
+        $subnets = $model->getSubnets('CidrAddress', 'desc');
+        $this->assertInstanceOf('Laminas\Db\ResultSet\AbstractResultSet', $subnets);
+        $subnets = iterator_to_array($subnets);
+        $this->assertCount(4, $subnets);
+        $this->assertContainsOnlyInstancesOf('Model\Network\Subnet', $subnets);
+        $this->assertSame(
+            array(
+                'Address' => '203.0.113.0',
+                'Mask' => '255.255.255.0',
+                'NumInventoried' => 0,
+                'NumIdentified' => 0,
+                'NumUnknown' => 1,
+                'Name' => null,
+            ),
+            $subnets[0]->getArrayCopy()
+        );
+        $this->assertSame(
+            array(
+                'Address' => '198.51.100.0',
+                'Mask' => '255.255.255.0',
+                'NumInventoried' => 0,
+                'NumIdentified' => 1,
+                'NumUnknown' => 0,
+                'Name' => null,
+            ),
+            $subnets[1]->getArrayCopy()
+        );
+        $this->assertSame(
+            array(
+                'Address' => '192.0.2.0',
+                'Mask' => '255.255.255.128',
+                'NumInventoried' => 1,
+                'NumIdentified' => 1,
+                'NumUnknown' => 1,
+                'Name' => 'NAME',
+            ),
+            $subnets[2]->getArrayCopy()
+        );
+        $this->assertSame(
+            array(
+                'Address' => '192.0.2.0',
+                'Mask' => '255.255.255.0',
+                'NumInventoried' => 1,
+                'NumIdentified' => 0,
+                'NumUnknown' => 0,
+                'Name' => null,
+            ),
+            $subnets[3]->getArrayCopy()
         );
     }
 
-    public function getSubnetsProvider()
+    public function getSubnetsOrderingProvider()
     {
-        $subnet1 = array(
-          'Address' => '192.0.2.0',
-          'Mask' => '255.255.255.0',
-          'NumInventoried' => '1',
-          'NumIdentified' => '0',
-          'NumUnknown' => '0',
-          'Name' => null,
-        );
-        $subnet2 = array(
-          'Address' => '192.0.2.0',
-          'Mask' => '255.255.255.128',
-          'NumInventoried' => '1',
-          'NumIdentified' => '1',
-          'NumUnknown' => '1',
-          'Name' => 'NAME',
-        );
         return array(
-            array('NumIdentified', 'asc', $subnet1, $subnet2),
-            array('NumIdentified', 'invalid', $subnet1, $subnet2), // becomes 'ASC'
-            array('NumIdentified', 'desc', $subnet2, $subnet1),
-            array('CidrAddress', 'desc', $subnet2, $subnet1), // IP addresses lexically sorted as strings
+            array('NumInventoried', 'invalid', array(0, 0, 1, 1)), // becomes 'ASC'
+            array('NumInventoried', 'asc', array(0, 0, 1, 1)),
+            array('NumInventoried', 'desc', array(1, 1, 0, 0)),
+            array('NumIdentified', 'asc', array(0, 0, 1, 1)),
+            array('NumIdentified', 'desc', array(1, 1, 0, 0)),
+            array('NumUnknown', 'asc', array(0, 0, 1, 1)),
+            array('NumUnknown', 'desc', array(1, 1, 0, 0)),
+            array(
+                'CidrAddress',
+                'asc',
+                array(
+                    '192.0.2.0/255.255.255.0',
+                    '192.0.2.0/255.255.255.128',
+                    '198.51.100.0/255.255.255.0',
+                    '203.0.113.0/255.255.255.0',
+                ),
+            ),
+            array(
+                'CidrAddress',
+                'desc',
+                array(
+                    '203.0.113.0/255.255.255.0',
+                    '198.51.100.0/255.255.255.0',
+                    '192.0.2.0/255.255.255.128',
+                    '192.0.2.0/255.255.255.0',
+                ),
+            ),
         );
     }
 
     /**
-     * @dataProvider getSubnetsProvider
+     * @dataProvider getSubnetsOrderingProvider
      */
-    public function testGetSubnets($order, $direction, $subnet1, $subnet2)
+    public function testGetSubnetsOrdering($order, $direction, $values)
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $subnets = $model->getSubnets($order, $direction);
-        $this->assertInstanceOf('Zend\Db\ResultSet\AbstractResultSet', $subnets);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\AbstractResultSet', $subnets);
         $subnets = iterator_to_array($subnets);
-        $this->assertCount(2, $subnets);
         $this->assertContainsOnlyInstancesOf('Model\Network\Subnet', $subnets);
-        $this->assertEquals($subnet1, $subnets[0]->getArrayCopy());
-        $this->assertEquals($subnet2, $subnets[1]->getArrayCopy());
+        // To keep the data set simple, not all values are unique. Since the
+        // order of rows with identical sort values is undefined, only the sort
+        // column is tested.
+        $this->assertSame(
+            $values,
+            array_column(
+                array_map(
+                    function ($object) {
+                        $subnet = $object->getArrayCopy();
+                        $subnet['CidrAddress'] = "$subnet[Address]/$subnet[Mask]";
+                        return $subnet;
+                    },
+                    $subnets
+                ),
+                $order
+            )
+        );
     }
 
     public function testGetSubnetsNoOrdering()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $subnets = $model->getSubnets();
-        $this->assertInstanceOf('Zend\Db\ResultSet\AbstractResultSet', $subnets);
+        $this->assertInstanceOf('Laminas\Db\ResultSet\AbstractResultSet', $subnets);
         $subnets = iterator_to_array($subnets);
-        $this->assertCount(2, $subnets);
+        $this->assertCount(4, $subnets);
         $this->assertContainsOnlyInstancesOf('Model\Network\Subnet', $subnets);
     }
 
@@ -118,7 +184,14 @@ class SubnetManagerTest extends \Model\Test\AbstractTest
      */
     public function testGetSubnet($address, $mask, $name)
     {
-        $model = $this->_getModel();
+        /** @var MockObject|IpNetworkAddress */
+        $validator = $this->createMock(IpNetworkAddress::class);
+        $validator->expects($this->once())->method('isValid')->with("$address/$mask")->willReturn(true);
+
+        $model = new SubnetManager(
+            static::$serviceManager->get(Subnets::class),
+            $validator
+        );
         $subnet = $model->getSubnet($address, $mask);
         $this->assertInstanceOf('Model\Network\Subnet', $subnet);
         $this->assertEquals(
@@ -131,17 +204,21 @@ class SubnetManagerTest extends \Model\Test\AbstractTest
         );
     }
 
-    /**
-     * @dataProvider invalidArgumentsProvider
-     */
-    public function testGetSubnetInvalidArguments($address, $mask, $message)
+    public function testGetSubnetInvalidArguments()
     {
-        $model = $this->_getModel();
-        try {
-            $model->getSubnet($address, $mask);
-        } catch (\InvalidArgumentException $e) {
-            $this->assertStringStartsWith($message, $e->getMessage());
-        }
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('message');
+
+        /** @var MockObject|IpNetworkAddress */
+        $validator = $this->createMock(IpNetworkAddress::class);
+        $validator->expects($this->once())->method('isValid')->with('address/mask')->willReturn(false);
+        $validator->method('getMessages')->willReturn(['message']);
+
+        $model = new SubnetManager(
+            static::$serviceManager->get(Subnets::class),
+            $validator
+        );
+        $model->getSubnet('address', 'mask');
     }
 
     public function saveSubnetProvider()
@@ -161,24 +238,38 @@ class SubnetManagerTest extends \Model\Test\AbstractTest
      */
     public function testSaveSubnet($address, $mask, $name, $dataSet)
     {
-        $model = $this->_getModel();
+        /** @var MockObject|IpNetworkAddress */
+        $validator = $this->createMock(IpNetworkAddress::class);
+        $validator->expects($this->once())->method('isValid')->with("$address/$mask")->willReturn(true);
+
+        $model = new SubnetManager(
+            static::$serviceManager->get(Subnets::class),
+            $validator
+        );
         $model->saveSubnet($address, $mask, $name, $dataSet);
         $this->assertTablesEqual(
-            $this->_loadDataset($dataSet)->getTable('subnet'),
-            $this->getConnection()->createQueryTable('subnet', 'SELECT netid, mask, name FROM subnet')
+            $this->loadDataSet($dataSet)->getTable('subnet'),
+            $this->getConnection()->createQueryTable(
+                'subnet',
+                'SELECT netid, mask, name FROM subnet ORDER BY netid, mask'
+            )
         );
     }
 
-    /**
-     * @dataProvider invalidArgumentsProvider
-     */
-    public function testSaveSubnetInvalidArguments($address, $mask, $message)
+    public function testSaveSubnetInvalidArguments()
     {
-        $model = $this->_getModel();
-        try {
-            $model->saveSubnet($address, $mask, null);
-        } catch (\InvalidArgumentException $e) {
-            $this->assertStringStartsWith($message, $e->getMessage());
-        }
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('message');
+
+        /** @var MockObject|IpNetworkAddress */
+        $validator = $this->createMock(IpNetworkAddress::class);
+        $validator->expects($this->once())->method('isValid')->with('address/mask')->willReturn(false);
+        $validator->method('getMessages')->willReturn(['message']);
+
+        $model = new SubnetManager(
+            static::$serviceManager->get(Subnets::class),
+            $validator
+        );
+        $model->saveSubnet('address', 'mask', null);
     }
 }

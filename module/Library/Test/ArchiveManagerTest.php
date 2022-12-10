@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the ArchiveManager class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,23 +22,26 @@
 
 namespace Library\Test;
 
-use \Library\ArchiveManager;
+use Library\ArchiveManager;
+use PHPUnit\Framework\MockObject\MockObject;
+use ZipArchive;
 
-class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
+class ArchiveManagerTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * @requires extension zip
      */
     public function testIsSupportedZip()
     {
-        $manager = new ArchiveManager;
+        $manager = new ArchiveManager();
         $this->assertTrue($manager->isSupported(ArchiveManager::ZIP));
     }
 
     public function testIsSupportedInvalid()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Unsupported archive type: invalid');
-        $manager = new ArchiveManager;
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Unsupported archive type: invalid');
+        $manager = new ArchiveManager();
         $this->assertTrue($manager->isSupported('invalid'));
     }
 
@@ -46,14 +50,15 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testIsArchiveZipFalse()
     {
-        $manager = new ArchiveManager;
+        $manager = new ArchiveManager();
         $this->assertFalse($manager->isArchive(ArchiveManager::ZIP, __FILE__));
     }
 
     public function testIsArchiveInvalid()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Unsupported archive type: invalid');
-        $manager = new ArchiveManager;
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Unsupported archive type: invalid');
+        $manager = new ArchiveManager();
         $this->assertFalse($manager->isArchive('invalid', __FILE__));
     }
 
@@ -62,16 +67,28 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testCreateArchiveZipError()
     {
-        $this->setExpectedException('RuntimeException', "Error creating ZIP archive '', code ");
-        $manager = new ArchiveManager;
-        $manager->createArchive(ArchiveManager::ZIP, '');
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage("Error creating ZIP archive '', code ");
+        $manager = new ArchiveManager();
+        @$manager->createArchive(ArchiveManager::ZIP, '');
     }
 
     public function testCreateArchiveInvalid()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Unsupported archive type: invalid');
-        $manager = new ArchiveManager;
-        $manager->createArchive('invalid', __FILE__);
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Unsupported archive type: invalid');
+        $manager = new ArchiveManager();
+        $manager->createArchive('invalid', '');
+    }
+
+    public function testCreateArchiveFileExists()
+    {
+        $tmpFile = tmpfile();
+        $filename = stream_get_meta_data($tmpFile)['uri'];
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('Archive already exists: ' . $filename);
+        $manager = new ArchiveManager();
+        $manager->createArchive('something', $filename);
     }
 
     /**
@@ -79,9 +96,10 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testCloseArchiveZipError()
     {
-        $this->setExpectedException('RuntimeException', 'Error closing ZIP archive');
-        $manager = new ArchiveManager;
-        $manager->closeArchive(new \ZipArchive);
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('Error closing ZIP archive');
+        $manager = new ArchiveManager();
+        $manager->closeArchive(new \ZipArchive());
     }
 
     /**
@@ -89,17 +107,11 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testCloseArchiveZipErrorIgnore()
     {
-        $archive = $this->getMock('ZipArchive');
+        /** @var MockObject|ZipArchive */
+        $archive = $this->createMock('ZipArchive');
         $archive->expects($this->once())->method('close');
-        $manager = new ArchiveManager;
+        $manager = new ArchiveManager();
         $manager->closeArchive($archive, true);
-    }
-
-    public function testCloseArchiveInvalid()
-    {
-        $this->setExpectedException('InvalidArgumentException', 'Unsupported archive');
-        $manager = new ArchiveManager;
-        $manager->closeArchive(null);
     }
 
     /**
@@ -107,16 +119,10 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testAddFileZipError()
     {
-        $this->setExpectedException('RuntimeException', "Error adding file 'file' to archive as 'name'");
-        $manager = new ArchiveManager;
-        $manager->addFile(new \ZipArchive, 'file', 'name');
-    }
-
-    public function testAddFileInvalid()
-    {
-        $this->setExpectedException('InvalidArgumentException', 'Unsupported archive');
-        $manager = new ArchiveManager;
-        $manager->addFile(null, 'file', 'name');
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage("Error adding file 'file' to archive as 'name'");
+        $manager = new ArchiveManager();
+        $manager->addFile(new \ZipArchive(), 'file', 'name');
     }
 
     /**
@@ -124,23 +130,44 @@ class ArchiveManagerTest extends \PHPUnit_Framework_TestCase
      */
     public function testZipArchiveCreation()
     {
-        // Zip extension does not support stream wrappers. Use real filesystem objects.
-        $tmpFile = tmpfile();
-        $archiveFile = stream_get_meta_data($tmpFile)['uri'];
+        // The Zip extension does not support stream wrappers. Use real
+        // filesystem objects instead. Since the target file must not exist,
+        // tmpfile() is not suitable. Instead, use tempnam() with a dedicated
+        // directory to get a safe filename and delete the created file. This
+        // is mostly safe because the only source for filename clashes would be
+        // another test running on the same tree in parallel, and the randomized
+        // filename part reduces the risk even further.
+        $tmpDir = \Library\Module::getPath('data/Test/ArchiveManager');
+        $archiveFile = tempnam($tmpDir, 'zip');
 
-        $manager = new ArchiveManager;
-        $archive = $manager->createArchive(ArchiveManager::ZIP, $archiveFile);
-        $manager->addFile($archive, __FILE__, 'äöü.txt');
-        $manager->closeArchive($archive);
+        try {
+            if (dirname($archiveFile) != $tmpDir) {
+                throw new \UnexpectedValueException('Could not generate temporary file in safe location');
+            }
 
-        $this->assertFileExists($archiveFile);
-        $this->assertTrue($manager->isArchive(ArchiveManager::ZIP, $archiveFile));
+            unlink($archiveFile);
+            $manager = new ArchiveManager();
+            $archive = $manager->createArchive(ArchiveManager::ZIP, $archiveFile);
+            $manager->addFile($archive, __FILE__, 'äöü.txt');
+            $manager->closeArchive($archive);
 
-        $testArchive = new \ZipArchive;
-        $this->assertTrue($testArchive->open($archiveFile));
-        $this->assertEquals(1, $testArchive->numFiles);
-        $content = $testArchive->getFromName('äöü.txt');
-        $this->assertNotFalse($content); // Message is easier readable in case of error
-        $this->assertEquals(file_get_contents(__FILE__), $content);
+            $this->assertFileExists($archiveFile);
+            $this->assertTrue($manager->isArchive(ArchiveManager::ZIP, $archiveFile));
+
+            $testArchive = new \ZipArchive();
+            $this->assertTrue($testArchive->open($archiveFile));
+            $this->assertEquals(1, $testArchive->numFiles);
+            $content = $testArchive->getFromName('äöü.txt');
+            $testArchive->close();
+            $this->assertNotFalse($content); // Message is easier readable in case of error
+            $this->assertEquals(file_get_contents(__FILE__), $content);
+
+            unlink($archiveFile);
+        } catch (\Exception $e) {
+            if ($archiveFile) {
+                @unlink($archiveFile);
+                throw $e;
+            }
+        }
     }
 }

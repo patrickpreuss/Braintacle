@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "download_enable" view
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,7 +22,8 @@
 
 namespace Database\Table;
 
-use Zend\Db\Sql\Literal;
+use Nada\Column\AbstractColumn as Column;
+use Laminas\Db\Sql\Literal;
 
 /**
  * "download_enable" view
@@ -33,7 +35,7 @@ class PackageDownloadInfo extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'download_enable';
         parent::__construct($serviceLocator);
@@ -43,7 +45,7 @@ class PackageDownloadInfo extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function setSchema()
+    public function updateSchema($prune = false)
     {
         // Reimplementation to provide a view instead of previous table
 
@@ -53,13 +55,13 @@ class PackageDownloadInfo extends \Database\AbstractTable
         if (in_array('download_enable', $database->getTableNames())) {
             // Use value of "fileid" column instead of obsolete "id" for package assignments
             $logger->info('Transforming package assignment IDs...');
-            $where = new \Zend\Db\Sql\Where;
+            $where = new \Laminas\Db\Sql\Where();
             $this->_serviceLocator->get('Database\Table\ClientConfig')->update(
                 array(
-                    'ivalue' => new \Zend\Db\Sql\Expression(
+                    'ivalue' => new \Laminas\Db\Sql\Expression(
                         sprintf(
                             '(SELECT CAST(fileid AS %s) FROM download_enable WHERE id = ivalue)',
-                            $database->getNativeDatatype(\Nada::DATATYPE_INTEGER, 32, true)
+                            $database->getNativeDatatype(Column::TYPE_INTEGER, 32, true)
                         )
                     )
                 ),
@@ -74,8 +76,8 @@ class PackageDownloadInfo extends \Database\AbstractTable
 
         if (!in_array('download_enable', $database->getViewNames())) {
             $logger->info("Creating view 'download_enable'");
-            $typeText =$database->getNativeDatatype(\Nada::DATATYPE_VARCHAR, 255, true);
-            $typeInt = $database->getNativeDatatype(\Nada::DATATYPE_INTEGER, 32, true);
+            $typeText = $database->getNativeDatatype(Column::TYPE_VARCHAR, 255, true);
+            $typeInt = $database->getNativeDatatype(Column::TYPE_INTEGER, 32, true);
             $null = 'CAST(NULL AS %s)';
             $sql = $this->_serviceLocator->get('Database\Table\Packages')->getSql();
             $select = $sql->select();

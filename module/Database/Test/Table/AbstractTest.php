@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for table interface tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,14 +22,22 @@
 
 namespace Database\Test\Table;
 
+use PHPUnit\DbUnit\Database\Connection;
+
 /**
  * Base class for table interface tests
  *
  * The table, class and fixture are automatically set up and the service is
  * automatically tested.
  */
-abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
+abstract class AbstractTest extends \PHPUnit\DbUnit\TestCase
 {
+    /**
+     * Service manager
+     * @var \Laminas\ServiceManager\ServiceManager
+     */
+    public static $serviceManager;
+
     /**
      * Table class, provided by setUpBeforeClass();
      * @var \Database\AbstractTable
@@ -37,59 +46,56 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
 
     /**
      * Connection used by DbUnit
-     * @var \PHPUnit_Extensions_Database_DB_IDatabaseConnection
      */
-    private $_db;
+    private Connection $_db;
 
     /**
      * Provide table class and create table
      */
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
-        static::$_table = \Library\Application::getService(static::_getClass());
-        static::$_table->setSchema();
+        static::$_table = static::$serviceManager->get(static::getClass());
+        static::$_table->updateSchema(true);
         parent::setUpBeforeClass();
     }
 
     /**
      * Get connection for DbUnit
-     * 
-     * @return \PHPUnit_Extensions_Database_DB_IDatabaseConnection
      */
-    public function getConnection()
+    public function getConnection(): Connection
     {
-        if (!$this->_db) {
+        if (!isset($this->_db)) {
             $pdo = static::$_table->getAdapter()->getDriver()->getConnection()->getResource();
             $this->_db = $this->createDefaultDBConnection($pdo, ':memory:');
         }
         return $this->_db;
     }
- 
+
     /**
      * Set up fixture from data/Test/Classname.yaml
      *
-     * @return \PHPUnit_Extensions_Database_DataSet_IDataSet
+     * @return \PHPUnit\DbUnit\DataSet\IDataSet
      */
     public function getDataSet()
     {
-        return $this->_loadDataSet();
+        return $this->loadDataSet();
     }
 
     /**
      * Load dataset from data/Test/Classname[/$testName].yaml
      *
      * @param string $testName Test name. If NULL, the fixture dataset for the test class is loaded.
-     * @return \PHPUnit_Extensions_Database_DataSet_IDataSet
+     * @return \PHPUnit\DbUnit\DataSet\IDataSet
      */
-    protected function _loadDataSet($testName=null)
+    protected function loadDataSet($testName = null)
     {
-        $class = $this->_getClass();
+        $class = $this->getClass();
         $class = substr($class, strrpos($class, '\\') + 1); // Remove namespace
         $file = "data/Test/$class";
         if ($testName) {
             $file .= "/$testName";
         }
-        return new \PHPUnit_Extensions_Database_DataSet_YamlDataSet(
+        return new \PHPUnit\DbUnit\DataSet\YamlDataSet(
             \Database\Module::getPath("$file.yaml")
         );
     }
@@ -99,7 +105,7 @@ abstract class AbstractTest extends \PHPUnit_Extensions_Database_TestCase
      *
      * @return string
      */
-    protected static function _getClass()
+    protected static function getClass()
     {
         // Derive table class from test class name (minus \Test namespace and 'Test' suffix)
         return substr(str_replace('\Test', '', get_called_class()), 0, -4);

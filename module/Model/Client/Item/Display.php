@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Display device (monitor, panel)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,9 +28,9 @@ namespace Model\Client\Item;
  * @property string $Manufacturer
  * @property string $Description
  * @property string $Serial
- * @property string $ProductionDate
+ * @property string $Edid EDID
  * @property string $Type
  */
-class Display extends \ArrayObject
+class Display extends \Model\AbstractModel
 {
 }

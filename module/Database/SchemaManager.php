@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Schema management class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database;
+namespace Database;
+
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Nada\Table\Mysql;
 
 /**
  * Schema management class
@@ -38,16 +42,11 @@ class SchemaManager
 
     /**
      * Service locator
-     * @var \Zend\ServiceManager\ServiceLocatorInterface
+     * @var \Laminas\ServiceManager\ServiceLocatorInterface
      */
-     protected $_serviceLocator;
+    protected $_serviceLocator;
 
-    /**
-     * Constructor
-     *
-     * @param \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator
-     */
-    function __construct($serviceLocator)
+    public function __construct(ServiceLocatorInterface $serviceLocator)
     {
         $this->_serviceLocator = $serviceLocator;
     }
@@ -57,81 +56,170 @@ class SchemaManager
      *
      * This is the simplest way to update the database. It performs all
      * necessary steps to update the database schema and migrate data.
+     *
+     * Database updates are wrapped in a transaction to prevent incomplete and
+     * possibly inconsistent updates in case of an error. Transaction support
+     * may be limited by the database.
+     *
+     * @param bool $prune Drop obsolete tables/columns
      */
-    public function updateAll()
+    public function updateAll($prune)
     {
         $nada = $this->_serviceLocator->get('Database\Nada');
-        $convertedTimestamps = $nada->convertTimestampColumns();
-        if ($convertedTimestamps) {
-            $this->_serviceLocator->get('Library\Logger')->info(
-                sprintf(
-                    '%d columns converted to %s.',
-                    $convertedTimestamps,
-                    $nada->getNativeDatatype(\Nada::DATATYPE_TIMESTAMP)
-                )
-            );
+        $connection = $this->_serviceLocator->get('Db')->getDriver()->getConnection();
+        $connection->beginTransaction();
+        try {
+            $convertedTimestamps = $nada->convertTimestampColumns();
+            if ($convertedTimestamps) {
+                $this->_serviceLocator->get('Library\Logger')->info(
+                    sprintf(
+                        '%d columns converted to %s.',
+                        $convertedTimestamps,
+                        $nada->getNativeDatatype(\Nada\Column\AbstractColumn::TYPE_TIMESTAMP)
+                    )
+                );
+            }
+            $this->updateTables($prune);
+            $this->_serviceLocator->get('Model\Config')->schemaVersion = self::SCHEMA_VERSION;
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
         }
-        $this->updateTables();
-        $this->_serviceLocator->get('Model\Config')->schemaVersion = self::SCHEMA_VERSION;
     }
 
     /**
      * Create/update all tables
      *
      * This method iterates over all JSON schema files in ./data, instantiates
-     * table objects of the same name for each file and calls their setSchema()
-     * method.
+     * table objects of the same name for each file and calls their
+     * updateSchema() method.
+     *
+     * @param bool $prune Drop obsolete tables/columns
      */
-    public function updateTables()
+    public function updateTables($prune)
     {
+        $database = $this->_serviceLocator->get('Database\Nada');
+        $handledTables = array();
+
         $glob = new \GlobIterator(Module::getPath('data/Tables') . '/*.json');
         foreach ($glob as $fileinfo) {
             $tableClass = $fileinfo->getBaseName('.json');
             $table = $this->_serviceLocator->get('Database\Table\\' . $tableClass);
-            $table->setSchema();
+            $table->updateSchema($prune);
+            $handledTables[] = $table->table;
         }
         // Views need manual invocation.
-        $this->_serviceLocator->get('Database\Table\Clients')->setSchema();
-        $this->_serviceLocator->get('Database\Table\PackageDownloadInfo')->setSchema();
-        $this->_serviceLocator->get('Database\Table\WindowsInstallations')->setSchema();
+        $this->_serviceLocator->get('Database\Table\Clients')->updateSchema();
+        $this->_serviceLocator->get('Database\Table\PackageDownloadInfo')->updateSchema();
+        $this->_serviceLocator->get('Database\Table\WindowsInstallations')->updateSchema();
+        $this->_serviceLocator->get('Database\Table\Software')->updateSchema();
 
         $logger = $this->_serviceLocator->get('Library\Logger');
 
         // Server tables have no table class
         $glob = new \GlobIterator(Module::getPath('data/Tables/Server') . '/*.json');
         foreach ($glob as $fileinfo) {
+            $schema = \Laminas\Config\Factory::fromFile($fileinfo->getPathname());
             self::setSchema(
                 $logger,
-                \Zend\Config\Factory::fromFile($fileinfo->getPathname()),
-                $this->_serviceLocator->get('Database\Nada')
+                $schema,
+                $database,
+                \Database\AbstractTable::getObsoleteColumns($logger, $schema, $database),
+                $prune
             );
+            $handledTables[] = $schema['name'];
         }
 
         // SNMP tables have no table class
         $glob = new \GlobIterator(Module::getPath('data/Tables/Snmp') . '/*.json');
         foreach ($glob as $fileinfo) {
+            $schema = \Laminas\Config\Factory::fromFile($fileinfo->getPathname());
+            $obsoleteColumns = \Database\AbstractTable::getObsoleteColumns(
+                $logger,
+                $schema,
+                $database
+            );
+
+            if ($schema['name'] == 'snmp_accountinfo') {
+                // Preserve columns which were added through the user interface.
+                $preserveColumns = array();
+                // accountinfo_config may not exist yet when populating an empty
+                // database. In that case, there are no obsolete columns.
+                if (in_array('accountinfo_config', $database->getTableNames())) {
+                    $customFieldConfig = $this->_serviceLocator->get('Database\Table\CustomFieldConfig');
+                    $select = $customFieldConfig->getSql()->select();
+                    $select->columns(array('id'))
+                           ->where(
+                               array(
+                                    'name_accountinfo' => null, // exclude system columns (TAG)
+                                    'account_type' => 'SNMP'
+                                )
+                           );
+                    foreach ($customFieldConfig->selectWith($select) as $field) {
+                        $preserveColumns[] = "fields_$field[id]";
+                    }
+                    $obsoleteColumns = array_diff($obsoleteColumns, $preserveColumns);
+                }
+            }
             self::setSchema(
                 $logger,
-                \Zend\Config\Factory::fromFile($fileinfo->getPathname()),
-                $this->_serviceLocator->get('Database\Nada')
+                $schema,
+                $database,
+                $obsoleteColumns,
+                $prune
             );
+            $handledTables[] = $schema['name'];
+        }
+
+        // Detect obsolete tables that are present in the database but not in
+        // any of the schema files.
+        $obsoleteTables = array_diff($database->getTableNames(), $handledTables);
+        foreach ($obsoleteTables as $table) {
+            if ($prune) {
+                $logger->notice("Dropping table $table...");
+                $database->dropTable($table);
+                $logger->notice("Done.");
+            } else {
+                $logger->warn("Obsolete table $table detected.");
+            }
         }
     }
 
     /**
      * Create or update table according to schema
      *
-     * @param \Zend\Log\Logger $logger Logger instance
+     * @param \Laminas\Log\Logger $logger Logger instance
      * @param array $schema Parsed table schema
-     * @param \Nada_Database $database Database object
+     * @param \Nada\Database\AbstractDatabase $database Database object
+     * @param string[] $obsoleteColumns List of obsolete columns to prune or warn about
+     * @param bool $prune Drop obsolete tables/columns
      */
-    public static function setSchema($logger, $schema, $database)
-    {
+    public static function setSchema(
+        $logger,
+        $schema,
+        $database,
+        array $obsoleteColumns = array(),
+        $prune = false
+    ) {
         $tableName = $schema['name'];
         if (in_array($tableName, $database->getTableNames())) {
             // Table exists
-            // Update table and column comments
             $table = $database->getTable($tableName);
+
+            // Drop obsolete indexes which might prevent subsequent transformations.
+            static::dropIndexes($logger, $table, $schema);
+
+            // Update table engine
+            if ($table instanceof Mysql and $table->getEngine() != $schema['mysql']['engine']) {
+                $logger->info(
+                    "Setting engine for table $tableName to {$schema['mysql']['engine']}..."
+                );
+                $table->setEngine($schema['mysql']['engine']);
+                $logger->info('done.');
+            }
+
+            // Update table and column comments
             if ($schema['comment'] != $table->getComment()) {
                 $table->setComment($schema['comment']);
             }
@@ -142,10 +230,7 @@ class SchemaManager
                     $columnObj = $table->getColumn($column['name']);
                     $columnObj->setComment($column['comment']);
                     // Change datatype if different.
-                    if (
-                        $columnObj->getDatatype() != $column['type'] or
-                        $columnObj->getLength() != $column['length']
-                    ) {
+                    if ($columnObj->isDifferent($column, ['type', 'length'])) {
                         $logger->info(
                             "Setting column $tableName.$column[name] type to $column[type]($column[length])..."
                         );
@@ -162,10 +247,10 @@ class SchemaManager
                         $logger->info('done.');
                     }
                     // Change default if different.
+                    // Since SQL types cannot be completely mapped to PHP
+                    // types, a loose comparision is required, but changes
+                    // to/from NULL must be taken into account.
                     if (
-                        // Since SQL types cannot be completely mapped to PHP
-                        // types, a loose comparision is required, but changes
-                        // to/from NULL must be taken into account.
                         $columnObj->getDefault() === null and $column['default'] !== null or
                         $columnObj->getDefault() !== null and $column['default'] === null or
                         $columnObj->getDefault() != $column['default']
@@ -213,7 +298,7 @@ class SchemaManager
             $logger->info("Creating table '$tableName'...");
             $table = $database->createTable($tableName, $schema['columns'], $schema['primary_key']);
             $table->setComment($schema['comment']);
-            if ($database->isMySql()) {
+            if ($table instanceof Mysql) {
                 $table->setEngine($schema['mysql']['engine']);
                 $table->setCharset('utf8');
             }
@@ -228,6 +313,50 @@ class SchemaManager
                     $table->createIndex($index['name'], $index['columns'], $index['unique']);
                     $logger->info('done.');
                 }
+            }
+        }
+
+        // Detect obsolete columns that are present in the database but not in
+        // the current schema.
+        foreach ($obsoleteColumns as $column) {
+            if ($prune) {
+                $logger->notice("Dropping column $tableName.$column...");
+                $table->dropColumn($column);
+                $logger->notice('done.');
+            } else {
+                $logger->warn("Obsolete column $tableName.$column detected.");
+            }
+        }
+    }
+
+    /**
+     * Drop indexes which are not defined in the schema.
+     */
+    protected static function dropIndexes(
+        \Laminas\Log\LoggerInterface $logger,
+        \Nada\Table\AbstractTable $table,
+        array $schema
+    ) {
+        if (!isset($schema['indexes'])) {
+            return;
+        }
+
+        $indexes = $schema['indexes'];
+        foreach ($indexes as &$index) {
+            // Remove index names for comparison
+            unset($index['name']);
+        }
+        unset($index);
+
+        foreach ($table->getIndexes() as $index) {
+            $index = $index->toArray();
+            // Remove index names for comparison, but preserve it for later reference
+            $name = $index['name'];
+            unset($index['name']);
+            if (!in_array($index, $indexes)) {
+                $logger->info("Dropping index $name...");
+                $table->dropIndex($name);
+                $logger->info('done.');
             }
         }
     }

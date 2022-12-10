@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Abstract strategy test case
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,26 +22,26 @@
 
 namespace Database\Test\Hydrator\Strategy;
 
-abstract class AbstractStrategyTest extends \PHPUnit_Framework_TestCase
+abstract class AbstractStrategyTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * Strategy instance
-     * @var \Zend\Stdlib\Hydrator\Strategy\StrategyInterface
+     * @var \Laminas\Hydrator\Strategy\StrategyInterface
      */
     protected $_strategy;
 
-    public function setUp()
+    public function setUp(): void
     {
         $class = get_class($this);
         $class = substr($class, strlen('Database\Test\Hydrator\Strategy'), -4);
         $class = '\Database\Hydrator\Strategy' . $class;
-        $this->_strategy = new $class;
+        $this->_strategy = new $class();
     }
 
     public function testInterface()
     {
         $this->assertInstanceOf(
-            'Zend\Stdlib\Hydrator\Strategy\StrategyInterface',
+            'Laminas\Hydrator\Strategy\StrategyInterface',
             $this->_strategy
         );
     }
@@ -50,7 +51,7 @@ abstract class AbstractStrategyTest extends \PHPUnit_Framework_TestCase
      */
     public function testHydrate($value, $expected)
     {
-        $this->assertEquals($expected, $this->_strategy->hydrate($value));
+        $this->assertSame($expected, $this->_strategy->hydrate($value, null));
     }
 
     /**
@@ -58,6 +59,6 @@ abstract class AbstractStrategyTest extends \PHPUnit_Framework_TestCase
      */
     public function testExtract($value, $expected)
     {
-        $this->assertEquals($expected, $this->_strategy->extract($value));
+        $this->assertSame($expected, $this->_strategy->extract($value));
     }
 }

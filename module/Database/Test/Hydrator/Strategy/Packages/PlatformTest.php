@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Platform strategy
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Database\Test\Hydrator\Strategy\Packages;
+
+use DomainException;
 
 class PlatformTest extends \Database\Test\Hydrator\Strategy\AbstractStrategyTest
 {
@@ -41,22 +44,17 @@ class PlatformTest extends \Database\Test\Hydrator\Strategy\AbstractStrategyTest
         );
     }
 
-    public function testInvalidValues()
+    public function testHydrateInvalidValue()
     {
-        // Suppress notices which are tested separately.
-        $this->assertNull(@$this->_strategy->hydrate('invalid'));
-        $this->assertNull(@$this->_strategy->extract('invalid'));
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Invalid platform: invalid');
+        $this->_strategy->hydrate('invalid', null);
     }
 
-    public function testNoticeOnHydrateInvalidValue()
+    public function testExtractInvalidValue()
     {
-        $this->setExpectedException('PHPUnit_Framework_Error_Notice');
-        $this->_strategy->hydrate('invalid');
-    }
-
-    public function testNoticeOnExtractInvalidValue()
-    {
-        $this->setExpectedException('PHPUnit_Framework_Error_Notice');
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Invalid platform: invalid');
         $this->_strategy->extract('invalid');
     }
 }

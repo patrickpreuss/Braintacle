@@ -160,7 +160,7 @@
             "type": "integer",
             "length": 32,
             "notnull": false,
-            "default": 0,
+            "default": null,
             "autoincrement": false,
             "comment": "CPU clock in MHz"
         },
@@ -316,6 +316,34 @@
             "unique": false,
             "columns": [
                 "name"
+            ]
+        },
+        {
+            "name": "hardware_memory_idx",
+            "unique": false,
+            "columns": [
+                "memory"
+            ]
+        },
+        {
+            "name": "hardware_osname_idx",
+            "unique": false,
+            "columns": [
+                "osname"
+            ]
+        },
+        {
+            "name": "hardware_userid_idx",
+            "unique": false,
+            "columns": [
+                "userid"
+            ]
+        },
+        {
+            "name": "hardware_workgroup_idx",
+            "unique": false,
+            "columns": [
+                "workgroup"
             ]
         },
         {

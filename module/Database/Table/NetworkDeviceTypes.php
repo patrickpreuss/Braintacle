@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "devicetype" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "devicetype" table
@@ -30,7 +31,7 @@ class NetworkDeviceTypes extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'devicetype';
         parent::__construct($serviceLocator);
@@ -40,9 +41,10 @@ class NetworkDeviceTypes extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _postSetSchema($logger, $schema, $database)
+    protected function postSetSchema($logger, $schema, $database, $prune)
     {
-        if (!\Library\Application::isTest() and isset($database->getTables()['network_devices'])) {
+        // Create entries for orphaned types in NetworkDevicesIdentified table
+        if (isset($database->getTables()['network_devices'])) {
             $definedTypes = $this->fetchCol('name');
             foreach ($this->adapter->query('SELECT DISTINCT type FROM network_devices')->execute() as $type) {
                 $type = $type['type'];

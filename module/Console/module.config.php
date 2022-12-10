@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Configuration for Console module
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,15 +20,41 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+use Console\Mvc\Controller\Plugin\Service\TranslateFactory;
+use Console\Mvc\Controller\Plugin\Translate;
+use Console\Template\TemplateRenderer;
+use Console\Template\TemplateRendererFactory;
+use Console\View\Helper\ClientHeader;
+use Console\View\Helper\ConsoleScript;
+use Console\View\Helper\Form\AddToGroup;
+use Console\View\Helper\Form\Package\Build;
+use Console\View\Helper\Form\Package\Update;
+use Console\View\Helper\Form\Search;
+use Console\View\Helper\GroupHeader;
+use Console\View\Helper\Service\ClientHeaderFactory;
+use Console\View\Helper\Service\GroupHeaderFactory;
+use Laminas\ServiceManager\Factory\InvokableFactory;
+
 return array(
     'controller_plugins' => array(
-        'factories' => array(
-            'SetActiveMenu' => 'Console\Mvc\Controller\Plugin\Service\SetActiveMenuFactory',
-        ),
-        'invokables' => array(
+        'aliases' => array(
+            '_' => Translate::class,
             'GetOrder' => 'Console\Mvc\Controller\Plugin\GetOrder',
+            'getOrder' => 'Console\Mvc\Controller\Plugin\GetOrder',
             'PrintForm' => 'Console\Mvc\Controller\Plugin\PrintForm',
-        )
+            'printForm' => 'Console\Mvc\Controller\Plugin\PrintForm',
+            'SetActiveMenu' => 'Console\Mvc\Controller\Plugin\SetActiveMenu',
+            'setActiveMenu' => 'Console\Mvc\Controller\Plugin\SetActiveMenu',
+            'Translate' => Translate::class,
+            'translate' => Translate::class,
+        ),
+        'factories' => array(
+            'Console\Mvc\Controller\Plugin\GetOrder' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Mvc\Controller\Plugin\SetActiveMenu' =>
+                'Console\Mvc\Controller\Plugin\Service\SetActiveMenuFactory',
+            'Console\Mvc\Controller\Plugin\PrintForm' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            Translate::class => TranslateFactory::class,
+        ),
     ),
     'controllers' => array(
         'factories' => array(
@@ -56,27 +83,19 @@ return array(
             'Console\Form\ManageRegistryValues' => 'Console\Form\Service\ManageRegistryValuesFactory',
             'Console\Form\NetworkDevice' => 'Console\Form\Service\NetworkDeviceFactory',
             'Console\Form\NetworkDeviceTypes' => 'Console\Form\Service\NetworkDeviceTypesFactory',
+            'Console\Form\Preferences\Agent' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Display' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Download' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Filters' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Groups' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Inventory' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\NetworkScanning' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\Packages' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\RawData' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\Form\Preferences\System' => 'Laminas\ServiceManager\Factory\InvokableFactory',
             'Console\Form\Search' => 'Console\Form\Service\SearchFactory',
             'Console\Form\ShowDuplicates' => 'Console\Form\Service\ShowDuplicatesFactory',
-        ),
-        'invokables' => array(
-            'Console\Form\ClientConfig' => 'Console\Form\ClientConfig',
-            'Console\Form\GroupMemberships' => 'Console\Form\GroupMemberships',
-            'Console\Form\Import' => 'Console\Form\Import',
-            'Console\Form\Login' => 'Console\Form\Login',
-            'Console\Form\Preferences\Agent' => 'Console\Form\Preferences\Agent',
-            'Console\Form\Preferences\Display' => 'Console\Form\Preferences\Display',
-            'Console\Form\Preferences\Download' => 'Console\Form\Preferences\Download',
-            'Console\Form\Preferences\Filters' => 'Console\Form\Preferences\Filters',
-            'Console\Form\Preferences\Groups' => 'Console\Form\Preferences\Groups',
-            'Console\Form\Preferences\Inventory' => 'Console\Form\Preferences\Inventory',
-            'Console\Form\Preferences\NetworkScanning' => 'Console\Form\Preferences\NetworkScanning',
-            'Console\Form\Preferences\Packages' => 'Console\Form\Preferences\Packages',
-            'Console\Form\Preferences\RawData' => 'Console\Form\Preferences\RawData',
-            'Console\Form\Preferences\System' => 'Console\Form\Preferences\System',
-            'Console\Form\ProductKey' => 'Console\Form\ProductKey',
-            'Console\Form\SoftwareFilter' => 'Console\Form\SoftwareFilter',
-            'Console\Form\Subnet' => 'Console\Form\Subnet',
+            'Console\Form\Software' => 'Console\Form\Service\SoftwareFactory',
         ),
     ),
     'router' => array(
@@ -100,25 +119,61 @@ return array(
     ),
     'service_manager' => array(
         'factories' => array(
-            'Console\Navigation\ClientMenu' => 'Console\Navigation\ClientMenuFactory',
-            'Console\Navigation\GroupMenu' => 'Console\Navigation\GroupMenuFactory',
             'Console\Navigation\MainMenu' => 'Console\Navigation\MainMenuFactory',
+            TemplateRenderer::class => TemplateRendererFactory::class,
+        ),
+    ),
+    'translator' => array(
+        'translation_file_patterns' => array(
+            array(
+                'type' => 'Po',
+                'base_dir' => __DIR__ . '/data/i18n',
+                'pattern' => '%s.po',
+            ),
         ),
     ),
     'view_helpers' => array(
-        'factories' => array(
-            'consoleUrl' => 'Console\View\Helper\Service\ConsoleUrlFactory',
-            'formatMessages' => 'Console\View\Helper\Service\FormatMessagesFactory',
-            'table' => 'Console\View\Helper\Service\TableFactory',
-        ),
-        'invokables' => array(
+        'aliases' => array(
+            'clientHeader' => ClientHeader::class,
+            'consoleScript' => ConsoleScript::class,
+            'consoleUrl' => 'Console\View\Helper\ConsoleUrl',
             'filterDescription' => 'Console\View\Helper\FilterDescription',
+            'groupHeader' => GroupHeader::class,
+            'table' => 'Console\View\Helper\Table',
+            'consoleForm' => 'Console\View\Helper\Form\Form',
+            'consoleFormAddToGroup' => AddToGroup::class,
+            'consoleFormFieldset' => 'Console\View\Helper\Form\Fieldset',
+            'consoleFormClientConfig' => 'Console\View\Helper\Form\ClientConfig',
+            'consoleFormManageRegistryValues' => 'Console\View\Helper\Form\ManageRegistryValues',
+            'consoleFormPackageBuild' => Build::class,
+            'consoleFormPackageUpdate' => Update::class,
+            'consoleFormSearch' => Search::class,
+            'consoleFormShowDuplicates' => 'Console\View\Helper\Form\ShowDuplicates',
+            'consoleFormSoftware' => 'Console\View\Helper\Form\Software',
+        ),
+        'factories' => array(
+            ClientHeader::class => ClientHeaderFactory::class,
+            ConsoleScript::class => InvokableFactory::class,
+            'Console\View\Helper\ConsoleUrl' => 'Console\View\Helper\Service\ConsoleUrlFactory',
+            'Console\View\Helper\FilterDescription' => 'Console\View\Helper\Service\FilterDescriptionFactory',
+            GroupHeader::class => GroupHeaderFactory::class,
+            'Console\View\Helper\Table' => 'Console\View\Helper\Service\TableFactory',
+            AddToGroup::class => InvokableFactory::class,
+            'Console\View\Helper\Form\Form' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\View\Helper\Form\Fieldset' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\View\Helper\Form\ClientConfig' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\View\Helper\Form\ManageRegistryValues' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            Build::class => InvokableFactory::class,
+            Update::class => InvokableFactory::class,
+            Search::class => InvokableFactory::class,
+            'Console\View\Helper\Form\ShowDuplicates' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+            'Console\View\Helper\Form\Software' => 'Laminas\ServiceManager\Factory\InvokableFactory',
         ),
     ),
     'view_manager' => array(
-        'doctype' => 'HTML4_STRICT',
+        'doctype' => 'HTML5',
         'template_path_stack' => array(
-            'console' => __DIR__ . '/view',
+            'console' => __DIR__ . '/views',
         ),
         'default_template_suffix' => 'php',
         'display_exceptions' => true,

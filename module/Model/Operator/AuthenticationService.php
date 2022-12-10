@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Authentication service
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,11 +25,11 @@ namespace Model\Operator;
 /**
  * Authentication service
  *
- * Provided by the service manager as Zend\Authentication\AuthenticationService,
- * this is the service that should be used for authentication against the
- * application's database.
+ * Provided by the service manager as
+ * Laminas\Authentication\AuthenticationService, this is the service that should
+ * be used for authentication against the application's database.
  */
-class AuthenticationService extends \Zend\Authentication\AuthenticationService
+class AuthenticationService extends \Laminas\Authentication\AuthenticationService
 {
     /**
      * Attempt login with given credentials
@@ -42,7 +43,7 @@ class AuthenticationService extends \Zend\Authentication\AuthenticationService
         if (!$id) {
             return false;
         }
-        $this->adapter->setIdentity($id)->setCredential(md5($password));
+        $this->getAdapter()->setIdentity($id)->setCredential($password);
         return $this->authenticate()->isValid();
     }
 
@@ -65,6 +66,6 @@ class AuthenticationService extends \Zend\Authentication\AuthenticationService
         if (!$this->hasIdentity()) {
             throw new \LogicException('Cannot change identity: not authenticated yet');
         }
-        $this->storage->write($id);
+        $this->getStorage()->write($id);
     }
 }

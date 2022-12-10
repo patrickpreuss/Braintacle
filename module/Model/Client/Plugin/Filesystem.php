@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Filesystem item plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -43,8 +44,7 @@ class Filesystem extends DefaultPlugin
         );
     }
 
-    /** {@inheritdoc} */
-    public function order($order, $direction)
+    public function order(?string $order, string $direction): void
     {
         if ($order == 'id') {
             $this->_select->order(array($order => $direction));

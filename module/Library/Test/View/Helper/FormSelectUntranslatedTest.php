@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the FormSelectUntranslated helper
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -28,17 +29,16 @@ class FormSelectUntranslatedTest extends AbstractTest
 {
     public function testFormElementHelperIntegration()
     {
-        $element = new \Zend\Form\Element\Select('test');
+        $element = new \Laminas\Form\Element\Select('test');
         $element->setAttribute('type', 'select_untranslated')
                 ->setValueOptions(array('Yes<b>', 'No'));
         $expected = <<<EOT
 <select name="test"><option value="0">Yes&lt;b&gt;</option>
 <option value="1">No</option></select>
 EOT;
-        $plugins = clone \Library\Application::getService('ViewHelperManager');
-        $view = new \Zend\View\Renderer\PhpRenderer;
-        $view->setHelperPluginManager($plugins);
-        $helper = $plugins->get('formElement');
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+        $view->setHelperPluginManager(static::$_helperManager);
+        $helper = static::$_helperManager->get('formElement');
         $helper->setView($view);
         $this->assertEquals($expected, $helper($element));
     }

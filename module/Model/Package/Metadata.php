@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Package metadata XML
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -40,10 +41,8 @@ class Metadata extends \Library\DomDocument
      *
      * Attributes are populated with values from the given package and
      * hardcoded defaults.
-     *
-     * @param array $data Package data
      */
-    public function setPackageData($data)
+    public function setPackageData(array $data)
     {
         $node = $this->createElement('DOWNLOAD');
 
@@ -53,27 +52,24 @@ class Metadata extends \Library\DomDocument
         $node->setAttribute('DIGEST', $data['Hash']);
         $node->setAttribute('PROTO', 'HTTP');
         $node->setAttribute('FRAGS', $data['NumFragments']);
-        $node->setAttribute('DIGEST_ALGO', 'SHA1');
+        $node->setAttribute('DIGEST_ALGO', strtoupper($data['HashType']));
         $node->setAttribute('DIGEST_ENCODE', 'Hexa');
         $node->setAttribute('PATH', ($data['DeployAction'] == 'store' ? $data['ActionParam'] : ''));
         $node->setAttribute('NAME', ($data['DeployAction'] == 'launch' ? $data['ActionParam'] : ''));
         $node->setAttribute('COMMAND', ($data['DeployAction'] == 'execute' ? $data['ActionParam'] : ''));
         $node->setAttribute('NOTIFY_USER', $data['Warn'] ? '1' : '0');
-        $node->setAttribute('NOTIFY_TEXT', $this->_escapeMessage($data['WarnMessage']));
+        $node->setAttribute('NOTIFY_TEXT', $this->escapeMessage($data['WarnMessage']));
         $node->setAttribute('NOTIFY_COUNTDOWN', $data['WarnCountdown']);
         $node->setAttribute('NOTIFY_CAN_ABORT', $data['WarnAllowAbort'] ? '1' : '0');
         $node->setAttribute('NOTIFY_CAN_DELAY', $data['WarnAllowDelay'] ? '1' : '0');
         $node->setAttribute('NEED_DONE_ACTION', $data['PostInstMessage'] ? '1' : '0');
-        $node->setAttribute('NEED_DONE_ACTION_TEXT', $this->_escapeMessage($data['PostInstMessage']));
+        $node->setAttribute('NEED_DONE_ACTION_TEXT', $this->escapeMessage($data['PostInstMessage']));
         $node->setAttribute('GARDEFOU', 'rien');
 
         if ($this->hasChildNodes()) {
             $this->replaceChild($node, $this->firstChild);
         } else {
             $this->appendChild($node);
-        }
-        if (!\Library\Application::isProduction()) {
-            $this->forceValid();
         }
     }
 
@@ -88,7 +84,7 @@ class Metadata extends \Library\DomDocument
     public function getPackageData()
     {
         $this->forceValid();
-        $node = $this->firstChild;
+        $node = $this->documentElement;
         $map = array(
             'store' => 'PATH',
             'launch' => 'NAME',
@@ -99,12 +95,12 @@ class Metadata extends \Library\DomDocument
             'DeployAction' => $action,
             'ActionParam' => $node->getAttribute($map[$action]),
             'Warn' => $node->getAttribute('NOTIFY_USER'),
-            'WarnMessage' => $this->_unescapeMessage($node->getAttribute('NOTIFY_TEXT')),
+            'WarnMessage' => $this->unescapeMessage($node->getAttribute('NOTIFY_TEXT')),
             'WarnCountdown' => $node->getAttribute('NOTIFY_COUNTDOWN'),
             'WarnAllowAbort' => $node->getAttribute('NOTIFY_CAN_ABORT'),
             'WarnAllowDelay' => $node->getAttribute('NOTIFY_CAN_DELAY'),
             'PostInstMessage' => $node->getAttribute('NEED_DONE_ACTION') ?
-                $this->_unescapeMessage($node->getAttribute('NEED_DONE_ACTION_TEXT')) :
+                $this->unescapeMessage($node->getAttribute('NEED_DONE_ACTION_TEXT')) :
                 ''
         );
     }
@@ -125,7 +121,7 @@ class Metadata extends \Library\DomDocument
      * @param string $message User notification message
      * @return string Escaped string
      */
-    protected function _escapeMessage($message)
+    protected function escapeMessage($message)
     {
         $message = str_replace('"', '&quot;', $message);
         $message = str_replace(array("\r\n", "\n\r", "\n", "\r"), '<br>', $message);
@@ -133,16 +129,16 @@ class Metadata extends \Library\DomDocument
     }
 
     /**
-     * Unescape string encoded by _escapeMessage()
+     * Unescape string encoded by escapeMessage()
      *
      * The returned string may not be identical to the original string because
-     * _escapeMessage() is not fully reversible, but should sufficiently match
-     * the original content. Line breaks are returned as \n.
+     * escapeMessage() is not fully reversible, but should sufficiently match
+     * the original content. Line breaks are returned as \\n.
      *
      * @param string $message Escaped user notification message
      * @return string Unescaped string
      */
-    protected function _unescapeMessage($message)
+    protected function unescapeMessage($message)
     {
         $message = preg_replace('#<br\s*/?>#i', "\n", $message);
         $message = str_replace('&quot;', '"', $message);

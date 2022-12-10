@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Filesystems hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -127,14 +128,15 @@ class FilesystemsTest extends \Library\Test\Hydrator\AbstractHydratorTest
      */
     public function testHydrateName($extracted, $hydrated)
     {
-        $hydrator = $this->_getHydrator();
+        $hydrator = $this->getHydrator();
         $this->assertEquals($hydrated, $hydrator->hydrateName($extracted));
     }
 
     public function testHydrateNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot hydrate name: invalid');
-        $hydrator = $this->_getHydrator();
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot hydrate name: invalid');
+        $hydrator = $this->getHydrator();
         $hydrator->hydrateName('invalid');
     }
 
@@ -158,14 +160,15 @@ class FilesystemsTest extends \Library\Test\Hydrator\AbstractHydratorTest
      */
     public function testExtractName($hydrated, $extracted)
     {
-        $hydrator = $this->_getHydrator();
+        $hydrator = $this->getHydrator();
         $this->assertEquals($extracted, $hydrator->extractName($hydrated));
     }
 
     public function testExtractNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot extract name: Invalid');
-        $hydrator = $this->_getHydrator();
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot extract name: Invalid');
+        $hydrator = $this->getHydrator();
         $hydrator->extractName('Invalid');
     }
 
@@ -186,7 +189,7 @@ class FilesystemsTest extends \Library\Test\Hydrator\AbstractHydratorTest
      */
     public function testHydrateValue($name, $extracted, $hydrated)
     {
-        $hydrator = $this->_getHydrator();
+        $hydrator = $this->getHydrator();
         $this->assertEquals($hydrated, $hydrator->hydrateValue($name, $extracted));
     }
 
@@ -206,7 +209,7 @@ class FilesystemsTest extends \Library\Test\Hydrator\AbstractHydratorTest
      */
     public function testExtractValue($name, $hydrated, $extracted)
     {
-        $hydrator = $this->_getHydrator();
+        $hydrator = $this->getHydrator();
         $this->assertEquals($extracted, $hydrator->extractValue($name, $hydrated));
     }
 }

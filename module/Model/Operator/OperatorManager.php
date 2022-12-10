@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Operator manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -47,8 +48,7 @@ class OperatorManager
     public function __construct(
         \Model\Operator\AuthenticationService $authenticationService,
         \Database\Table\Operators $operators
-    )
-    {
+    ) {
         $this->_authenticationService = $authenticationService;
         $this->_operators = $operators;
     }
@@ -58,9 +58,9 @@ class OperatorManager
      *
      * @param string $order Property to sort by
      * @param string $direction Sorting order (asc|desc)
-     * @return \Zend\Db\ResultSet\AbstractResultSet Result set producing \Model\Operator\Operator
+     * @return \Laminas\Db\ResultSet\AbstractResultSet Result set producing \Model\Operator\Operator
      */
-    public function fetchAll($order='Id', $direction='asc')
+    public function getOperators($order = 'Id', $direction = 'asc')
     {
         $select = $this->_operators->getSql()->select();
         $select->columns(array('id', 'firstname', 'lastname', 'email', 'comments'));
@@ -89,7 +89,7 @@ class OperatorManager
      * @throws \InvalidArgumentException if no ID is given.
      * @throws \RuntimeException if no account with given name exists
      */
-    public function get($id)
+    public function getOperator($id)
     {
         if (!is_string($id) or $id == '') {
             throw new \InvalidArgumentException('No login name supplied');
@@ -111,7 +111,7 @@ class OperatorManager
      * @param string $password Password for the new account, must not be empty.
      * @throws \InvalidArgumentException if no ID or password is given.
      */
-    public function create($data, $password)
+    public function createOperator($data, $password)
     {
         if (!@$data['Id']) {
             throw new \InvalidArgumentException('No login name supplied');
@@ -121,9 +121,10 @@ class OperatorManager
         }
 
         // Compose array of columns to set
-        $insert = @$this->_operators->getHydrator()->extract(new \ArrayObject($data));
+        $insert = @$this->_operators->getHydrator()->extract(new Operator($data));
         unset($insert['']); // caused by unrecognized key, ignore
-        $insert['passwd'] = md5($password);
+        $insert['passwd'] = $this->_authenticationService->getAdapter()->generateHash($password);
+        $insert['password_version'] = \Database\Table\Operators::HASH_DEFAULT;
 
         $this->_operators->insert($insert);
     }
@@ -135,14 +136,15 @@ class OperatorManager
      * @param string[] $data List of properties to set. Unknown keys will be ignored.
      * @param string $password New password. If empty, password will remain unchanged.
      */
-    public function update($id, $data, $password)
+    public function updateOperator($id, $data, $password)
     {
         // Compose array of columns to set
-        $update = @$this->_operators->getHydrator()->extract(new \ArrayObject($data));
+        $update = @$this->_operators->getHydrator()->extract(new Operator($data));
         unset($update['']); // caused by unrecognized key, ignore
         // Set password if specified
         if ($password) {
-            $update['passwd'] = md5($password);
+            $update['passwd'] = $this->_authenticationService->getAdapter()->generateHash($password);
+            $update['password_version'] = \Database\Table\Operators::HASH_DEFAULT;
         }
         if (!$this->_operators->update($update, array('id' => $id))) {
             throw new \RuntimeException('Invalid user name: ' . $id);
@@ -160,7 +162,7 @@ class OperatorManager
      * @param string $id Login name of account to delete
      * @throws \RuntimeException if the account to delete is logged in for the current session
      */
-    public function delete($id)
+    public function deleteOperator($id)
     {
         if ($id == $this->_authenticationService->getIdentity()) {
             throw new \RuntimeException('Cannot delete account of current user');

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Abstract factory for table objects
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Service;
+namespace Database\Service;
 
 /**
  * Abstract factory for table objects
@@ -28,32 +29,27 @@ Namespace Database\Service;
  * instantiate an object of the same name, injecting the service locator into
  * its constructor.
  */
-class AbstractTableFactory implements \Zend\ServiceManager\AbstractFactoryInterface
+class AbstractTableFactory implements \Laminas\ServiceManager\Factory\AbstractFactoryInterface
 {
     /**
-     * @internal
+     * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function canCreateServiceWithName(
-        \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator,
-        $name,
-        $requestedName
-    )
+    public function canCreate(\Interop\Container\ContainerInterface $container, $requestedName)
     {
         return strpos($requestedName, 'Database\Table\\') === 0;
     }
 
     /**
-     * @internal
+     * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function createServiceWithName(
-        \Zend\ServiceManager\ServiceLocatorInterface $serviceLocator,
-        $name,
-        $requestedName
-    )
-    {
-        $table = new $requestedName($serviceLocator);
+    public function __invoke(
+        \Interop\Container\ContainerInterface $container,
+        $requestedName,
+        array $options = null
+    ) {
+        $table = new $requestedName($container);
         $table->initialize();
         return $table;
     }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Hydrator for clients (BIOS section)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,13 +22,15 @@
 
 namespace Protocol\Hydrator;
 
+use Model\AbstractModel;
+
 /**
  * Hydrator for clients (BIOS section)
  *
  * Unlike with other hydrators, objects are not reset by hydrate(), i.e. data is
  * merged with previous content. Unknown names are ignored.
  */
-class ClientsBios implements \Zend\Stdlib\Hydrator\HydratorInterface
+class ClientsBios implements \Laminas\Hydrator\HydratorInterface
 {
     /**
      * Map for hydrateName()
@@ -35,14 +38,14 @@ class ClientsBios implements \Zend\Stdlib\Hydrator\HydratorInterface
      * @var string[]
      */
     protected $_hydratorMap = array(
-        'ASSETTAG' => 'AssetTag',
-        'BDATE' => 'BiosDate',
-        'BMANUFACTURER' => 'BiosManufacturer',
-        'BVERSION' => 'BiosVersion',
-        'SMANUFACTURER' => 'Manufacturer',
-        'SMODEL' => 'Model',
-        'SSN' => 'Serial',
-        'TYPE' => 'Type',
+        'ASSETTAG' => 'assetTag',
+        'BDATE' => 'biosDate',
+        'BMANUFACTURER' => 'biosManufacturer',
+        'BVERSION' => 'biosVersion',
+        'SMANUFACTURER' => 'manufacturer',
+        'SMODEL' => 'model',
+        'SSN' => 'serial',
+        'TYPE' => 'type',
     );
 
     /**
@@ -50,16 +53,16 @@ class ClientsBios implements \Zend\Stdlib\Hydrator\HydratorInterface
      *
      * @var string[]
      */
-    protected $_extractorMap = array(
-        'AssetTag' => 'ASSETTAG',
-        'BiosDate' => 'BDATE',
-        'BiosManufacturer' => 'BMANUFACTURER',
-        'BiosVersion' => 'BVERSION',
-        'Manufacturer' => 'SMANUFACTURER',
-        'Model' => 'SMODEL',
-        'Serial' => 'SSN',
-        'Type' => 'TYPE',
-    );
+    protected $_extractorMap = [
+        'assetTag' => 'ASSETTAG',
+        'biosDate' => 'BDATE',
+        'biosManufacturer' => 'BMANUFACTURER',
+        'biosVersion' => 'BVERSION',
+        'manufacturer' => 'SMANUFACTURER',
+        'model' => 'SMODEL',
+        'serial' => 'SSN',
+        'type' => 'TYPE',
+    ];
 
     /** {@inheritdoc} */
     public function hydrate(array $data, $object)
@@ -67,17 +70,20 @@ class ClientsBios implements \Zend\Stdlib\Hydrator\HydratorInterface
         foreach ($data as $name => $value) {
             $name = $this->hydrateName($name);
             if ($name) {
-                $object[$name] = $this->hydrateValue($name, $value);
+                $object->$name = $this->hydrateValue($name, $value);
             }
         }
         return $object;
     }
 
     /** {@inheritdoc} */
-    public function extract($object)
+    public function extract(object $object): array
     {
         $data = array();
         foreach ($object as $name => $value) {
+            if ($object instanceof AbstractModel) {
+                $name = lcfirst($name);
+            }
             $name = $this->extractName($name);
             if ($name) {
                 $data[$name] = $this->extractValue($name, $value);

@@ -1,11 +1,11 @@
 {
     "name": "blacklist_serials",
-    "comment": "List of serials that are not unique, i.e. no indicator for duplicate computers.",
+    "comment": "List of serials that are not unique, i.e. no indicator for duplicate clients.",
     "columns": [
         {
             "name": "serial",
             "type": "varchar",
-            "length": 255,
+            "length": 191,
             "notnull": true,
             "default": null,
             "autoincrement": false,
@@ -16,6 +16,6 @@
         "serial"
     ],
     "mysql": {
-        "engine": "MyISAM"
+        "engine": "InnoDB"
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Registry value definition
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,8 @@
 
 namespace Model\Registry;
 
+use ReturnTypeWillChange;
+
 /**
  * Registry value definition
  *
@@ -35,7 +38,7 @@ namespace Model\Registry;
  * @property string $Value Registry value to inventory (NULL for all values)
  * @property-read string $FullPath Textual representation of configured value
  */
-class Value extends \ArrayObject
+class Value extends \Model\AbstractModel
 {
     /**
      * Root key HKEY_CLASSES_ROOT
@@ -93,17 +96,17 @@ class Value extends \ArrayObject
         return self::$_rootKeys;
     }
 
-    /** {@inheritdoc} */
-    public function offsetGet($index)
+    #[ReturnTypeWillChange]
+    public function offsetGet($key)
     {
-        if ($index == 'FullPath') {
+        if ($key == 'FullPath') {
             $value  = self::$_rootKeys[$this['RootKey']];
             $value .= '\\';
             $value .= $this['SubKeys'];
             $value .= '\\';
             $value .= $this['Value'] ?: '*';
         } else {
-            $value = parent::offsetGet($index);
+            $value = parent::offsetGet($key);
         }
         return $value;
     }

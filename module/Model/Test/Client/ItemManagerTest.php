@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Client\ItemManager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -25,6 +26,7 @@ class ItemManagerTest extends \Model\Test\AbstractTest
 {
     protected static $_tables = array(
         'ClientsAndGroups',
+        'AndroidInstallations',
         'DuplicateMacAddresses',
         'SoftwareDefinitions',
         'AudioDevices',
@@ -44,6 +46,7 @@ class ItemManagerTest extends \Model\Test\AbstractTest
         'RegistryData',
         'Sim',
         'Software',
+        'SoftwareRaw',
         'StorageDevices',
         'VirtualMachines',
     );
@@ -72,19 +75,21 @@ class ItemManagerTest extends \Model\Test\AbstractTest
                 'storagedevice',
                 'virtualmachine',
             ),
-            $this->_getModel()->getItemTypes()
+            $this->getModel()->getItemTypes()
         );
     }
     public function testGetTableNameInvalidType()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Invalid item type: invalid');
-        $this->_getModel()->getTableName('invalid');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Invalid item type: invalid');
+        $this->getModel()->getTableName('invalid');
     }
 
     public function testGetTableInvalidType()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Invalid item type: invalid');
-        $this->_getModel()->getTable('invalid');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Invalid item type: invalid');
+        $this->getModel()->getTable('invalid');
     }
 
     public function getItemsProvider()
@@ -94,9 +99,10 @@ class ItemManagerTest extends \Model\Test\AbstractTest
             array('AudioDevice', null, 'Name', 'desc', array('name2', 'name1'), 'Name'),
             array('AudioDevice', null, null, 'something', array('name2', 'name1'), 'Name'),
             array('audiodevice', array('Client' => 2), null, null, array('name2'), 'Name'),
-            array('Controller', null, 'id', 'desc', array('name2', 'name1'), 'Name'),
-            array('Controller', null, null, 'something', array('name1', 'name2'), 'Name'),
-            array('controller', array('Client' => 2), null, null, array('name2'), 'Name'),
+            # For controllers, different columns map to the "Name" property depending on agent type
+            array('Controller', null, 'id', 'desc', array('manufacturer2', 'name1'), 'Name'),
+            array('Controller', null, null, 'something', array('name1', 'manufacturer2'), 'Name'),
+            array('controller', array('Client' => 2), null, null, array('manufacturer2'), 'Name'),
             array('Cpu', array('Client' => 3), 'id', 'asc', array('type3a', 'type3b'), 'Type'),
             array('Cpu', array('Client' => 4), 'Manufacturer', 'desc', array('type4b', 'type4a'), 'Type'),
             array(
@@ -138,10 +144,10 @@ class ItemManagerTest extends \Model\Test\AbstractTest
             array('msofficeproduct', array('Client' => 2), null, null, array('name2'), 'Name'),
             array('MsOfficeProduct', array('Type' => 0), null, null, array('name1'), 'Name'),
             array('MsOfficeProduct', array('Type' => 1), null, null, array('name2'), 'Name'),
-            array('NetworkInterface', null, 'id', 'asc', array('1', '0'), 'IsBlacklisted'),
-            array('NetworkInterface', null, 'Status', 'desc', array('1', '0'), 'IsBlacklisted'),
-            array('NetworkInterface', null, null, 'something', array('1', '0'), 'IsBlacklisted'),
-            array('networkinterface', array('Client' => 2), null, null, array('0'), 'IsBlacklisted'),
+            array('NetworkInterface', null, 'id', 'asc', array(1, 0), 'IsBlacklisted'),
+            array('NetworkInterface', null, 'Status', 'desc', array(1, 0), 'IsBlacklisted'),
+            array('NetworkInterface', null, null, 'something', array(1, 0), 'IsBlacklisted'),
+            array('networkinterface', array('Client' => 2), null, null, array(0), 'IsBlacklisted'),
             array('Port', null, 'id', 'asc', array('name1', 'name2'), 'Name'),
             array('Port', null, 'Type', 'desc', array('name1', 'name2'), 'Name'),
             array('Port', null, null, 'something', array('name1', 'name2'), 'Name'),
@@ -150,36 +156,23 @@ class ItemManagerTest extends \Model\Test\AbstractTest
             array('Printer', null, 'Port', 'desc', array('name1', 'name2'), 'Name'),
             array('Printer', null, null, 'something', array('name1', 'name2'), 'Name'),
             array('printer', array('Client' => 2), null, null, array('name2'), 'Name'),
-            array('RegistryData', null, 'id', 'asc', array('value=data2', 'data', '=data1'), 'Data'),
-            array('RegistryData', null, 'Data', 'desc', array('value=data2', 'data', '=data1'), 'Data'),
-            array('RegistryData', null, null, 'something', array('=data1', 'value=data2', 'data'), 'Data'),
-            array('registrydata', array('Client' => 2), null, null, array('data'), 'Data'),
+            array('RegistryData', null, 'id', 'asc', array('data1a', 'data2', 'data1b'), 'Data'),
+            array('RegistryData', null, 'Data', 'desc', array('data2', 'data1b', 'data1a'), 'Data'),
+            array('RegistryData', null, null, 'something', array('data1a', 'data1b', 'data2'), 'Data'),
+            array('registrydata', array('Client' => 2), null, null, array('data2'), 'Data'),
             array('Sim', null, 'id', 'asc', array('name1', 'name2'), 'OperatorName'),
             array('Sim', null, 'SimSerial', 'desc', array('name1', 'name2'), 'OperatorName'),
             array('Sim', null, null, 'something', array('name1', 'name2'), 'OperatorName'),
             array('sim', array('Client' => 2), null, null, array('name2'), 'OperatorName'),
-            array('Software', null, 'id', 'asc', array('name1', 'name2', 'name3', 'name4', ''), 'Name'),
-            array('Software', null, 'Version', 'desc', array('name4', 'name3', 'name1', 'name2', ''), 'Name'),
-            array('Software', null, null, 'something', array('', 'name1', 'name2', 'name3', 'name4'), 'Name'),
-            array('software', array('Client' => 2), null, null, array('name2'), 'Name'),
-            array(
-                'software',
-                array('Software.NotIgnored' => null),
-                null,
-                null,
-                array('name2', 'name3', 'name4'),
-                'Name'
-            ),
-            array(
-                'Software',
-                array('Client' => 1, 'Software.NotIgnored' => null),
-                null,
-                null,
-                array('name3', 'name4'),
-                'Name'
-            ),
-            array('StorageDevice', null, null, 'something', array('name1', 'name2'), 'Model'),
-            array('storagedevice', array('Client' => 2), null, null, array('name2'), 'Model'),
+            ['Software', null, 'id', 'asc', ['name1', 'name2', 'name3', 'name4', ''], 'name'],
+            ['Software', null, 'Version', 'desc', ['name4', 'name3', 'name1', 'name2', ''], 'name'],
+            ['Software', null, null, 'something', ['name1', 'name2', 'name3', 'name4', ''], 'name'],
+            ['software', ['Client' => 2], null, null, ['name2'], 'name'],
+            ['software', ['Software.NotIgnored' => null], null, null, ['name2', 'name3', 'name4', ''], 'name'],
+            ['Software', ['Client' => 1, 'Software.NotIgnored' => null], null, null, ['name3', 'name4', ''], 'name'],
+            array('StorageDevice', array('Client' => 1), null, null, array('name1'), 'ProductName'),
+            array('StorageDevice', array('Client' => 2), null, null, array('name2'), 'ProductName'),
+            array('storagedevice', array('Client' => 5), null, null, array('android_type'), 'Type'),
             array('VirtualMachine', null, 'id', 'asc', array('name1', 'name2'), 'Name'),
             array('VirtualMachine', null, 'Type', 'desc', array('name1', 'name2'), 'Name'),
             array('VirtualMachine', null, null, 'something', array('name1', 'name2'), 'Name'),
@@ -190,36 +183,41 @@ class ItemManagerTest extends \Model\Test\AbstractTest
     /**
      * @dataProvider getItemsProvider
      */
-    public function testGetItems($type, $filters, $order, $direction, $result, $keyColumn)
+    public function testGetItems($type, $filters, $order, $direction, $expectedResult, $keyColumn)
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $items = $model->getItems($type, $filters, $order, $direction);
-        $this->assertInstanceOf('Zend\Db\Resultset\AbstractResultset', $items);
+        $this->assertInstanceOf('Laminas\Db\Resultset\AbstractResultset', $items);
         $items = iterator_to_array($items);
         $this->assertContainsOnlyInstancesOf("Model\\Client\\Item\\$type", $items);
-        $this->assertEquals(
-            $result,
-            array_map(
-                function($element) use ($keyColumn) {
-                    return $element[$keyColumn];
-                },
-                $items
-            )
+
+        $result = array_map(
+            function ($element) use ($keyColumn) {
+                return $element->$keyColumn;
+            },
+            $items
         );
+        // Move eventual empty values at the beginning to the end of the array.
+        // This comes from different ordering of NULL values by DBMS.
+        if ($result and $result[0] === '') {
+            array_shift($result);
+            $result[] = '';
+        }
+        $this->assertEquals($expectedResult, $result);
     }
 
     public function testDeleteItems()
     {
-        $model = $this->_getModel();
+        $model = $this->getModel();
         $model->deleteItems(1);
-        $dataSet = new \PHPUnit_Extensions_Database_DataSet_QueryDataSet($this->getConnection());
+        $dataSet = new \PHPUnit\DbUnit\DataSet\QueryDataSet($this->getConnection());
         foreach (static::$_tables as $table) {
             if ($table == 'ClientsAndGroups' or $table == 'DuplicateMacAddresses' or $table == 'SoftwareDefinitions') {
                 continue;
             }
-            $table = \Library\Application::getService("Database\\Table\\$table")->table;
+            $table = static::$serviceManager->get("Database\\Table\\$table")->table;
             $dataSet->addTable($table, "SELECT hardware_id FROM $table");
         }
-        $this->assertDataSetsEqual($this->_loadDataSet('DeleteItems'), $dataSet);
+        $this->assertDataSetsEqual($this->loadDataSet('DeleteItems'), $dataSet);
     }
 }

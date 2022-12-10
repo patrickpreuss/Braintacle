@@ -20,33 +20,32 @@ applications.
 Requirements
 ------------
 
-- A [PostgreSQL](http://postgresql.org) or [MySQL](http://mysql.org) database.
+- A [PostgreSQL](https://postgresql.org) or [MySQL](https://www.mysql.com) (or one of its derivates, like [MariaDB](https://mariadb.org)) database.
   Support for other database backends may be added in the future.
 
-- [Apache httpd](http://httpd.apache.org) web server with
-  [mod_perl](http://perl.apache.org) and a database-specific DBD module for the
+- [Apache httpd](http://httpd.apache.org) with [mod_perl](https://perl.apache.org) and a database-specific DBD module for the
   main server component.
 
-- A web server with [PHP](http://php.net) 5.5 or later for the administration
+- A web server with [PHP](https://php.net) 7.4 or later for the administration
   console. PHP is also required for most of the command line tools. The following
   PHP extensions are required:
 
-  - A database-specific PHP extension,
-  <http://framework.zend.com/manual/2.4/en/modules/zend.db.adapter.html>
+  - A database-specific PHP extension, see
+    https://docs.laminas.dev/laminas-db/adapter/#creating-an-adapter-using-configuration
 
   - The "intl" extension
+
+  - The "mbstring" extension
 
   - The "zip" extension is optional. If present, the package builder can create ZIP
     archives on the fly.
 
-  There are also some PHP libraries required in the include path:
+  - The "gmp" extension is required on 32 bit PHP installations only.
 
-  - [Zend Framework](http://framework.zend.com) 2.4.8 or later
-
-  - [NADA](https://github.com/hschletz/NADA)
+- [Composer](https://getcomposer.org/)
 
 - On every client that should be managed through Braintacle, either the
-  [OCS Inventory NG agent](http://www.ocsinventory-ng.org/en/download/download-agent.html) or
+  [OCS Inventory NG agent](https://github.com/OCSInventory-NG/) for Windows/UNIX/Android or
   [FusionInventory Agent](http://www.fusioninventory.org/documentation/agent/installation/)
   must be installed.
 
@@ -75,10 +74,9 @@ contains this file.
 This project contains some third party code:
 
 - A patched version of the [OCS inventory NG server
-  components](http://www.ocsinventory-ng.org/), licensed under the GNU General
-  Public License v2) is included in the ocsinventory/ directory.
-  See <http://www.ocsinventory-ng.org/en/about/licence.html>.
+  components](https://www.ocsinventory-ng.org/), licensed under the GNU General
+  Public License v2) is included in the server/ directory.
 
 - The file module/Library/data/MacAddress/manuf is taken from the
-  [Wireshark](http://wireshark.org) project. GPLv2 and copyright information are
+  [Wireshark](https://wireshark.org) project. GPLv2 and copyright information are
   contained at the top of this file.

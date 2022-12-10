@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Client
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,6 +22,15 @@
 
 namespace Model\Client;
 
+use Database\Hydrator\NamingStrategy\MapNamingStrategy;
+use Database\Table\ClientConfig;
+use Laminas\Db\ResultSet\HydratingResultSet;
+use Laminas\Db\Sql\Select;
+use Laminas\Hydrator\ObjectPropertyHydrator;
+use Laminas\Hydrator\Strategy\DateTimeFormatterStrategy;
+use Model\Package\Assignment;
+use ReturnTypeWillChange;
+
 /**
  * Client
  *
@@ -28,11 +38,11 @@ namespace Model\Client;
  * an item in the form "Type.Property".
  *
  * @property integer $Id primary key
- * @property string $ClientId client-generated ID (name + timestamp, like 'COMPUTERNAME-2009-04-27-15-52-37')
- * @property string $Name computer name
- * @property string $Type computer type (Desktop, Notebook...) as reported by BIOS
+ * @property string $IdString client-generated ID (name + timestamp, like 'NAME-2009-04-27-15-52-37')
+ * @property string $Name Name
+ * @property string $Type Type (Desktop, Notebook...) as reported by BIOS
  * @property string $Manufacturer system manufacturer
- * @property string $Model system model
+ * @property string $ProductName product name
  * @property string $Serial serial number
  * @property string $AssetTag asset tag
  * @property integer $CpuClock CPU clock in MHz
@@ -48,13 +58,14 @@ namespace Model\Client;
  * @property string $DnsDomain DNS domain name (UNIX clients only)
  * @property string $DnsServer IP Address of DNS server
  * @property string $DefaultGateway default gateway
- * @property string $OcsAgent user agent identification string
  * @property string $OsName OS name
  * @property string $OsVersionNumber internal OS version number
  * @property string $OsVersionString OS version (Service pack, kernel version etc...)
  * @property string $OsComment OS comment
+ * @property string $UserAgent user agent identification string
  * @property string $UserName user logged in at time of inventory
  * @property string $Uuid UUID (typically provided by BIOS)
+ * @property \Model\Client\AndroidInstallation $Android Android installation info, NULL for non-Android systems
  * @property \Model\Client\WindowsInstallation $Windows Windows installation info, NULL for non-Windows systems
  * @property \Model\Client\CustomFields $CustomFields custom fields
  * @property bool $IsSerialBlacklisted TRUE if the serial is ignored for detection of duplicates
@@ -127,18 +138,26 @@ class Client extends \Model\ClientOrGroup
      */
     protected $_groups;
 
-    /** {@inheritdoc} */
-    public function offsetGet($index)
+    #[ReturnTypeWillChange]
+    public function offsetGet($key)
     {
-        if ($this->offsetExists($index)) {
-            $value = parent::offsetGet($index);
-        } elseif (strpos($index, 'Registry.') === 0) {
+        $key = ucfirst($key);
+        if ($this->offsetExists($key)) {
+            $value = parent::offsetGet($key);
+        } elseif (strpos($key, 'Registry.') === 0) {
             $value = $this['Registry.Content'];
         } else {
             // Virtual properties from database queries
-            switch ($index) {
+            switch ($key) {
+                case 'Android':
+                    $androidInstallations = $this->_serviceLocator->get('Database\Table\AndroidInstallations');
+                    $select = $androidInstallations->getSql()->select();
+                    $select->columns(['javacountry', 'javaname', 'javaclasspath', 'javahome']);
+                    $select->where(array('hardware_id' => $this['Id']));
+                    $value = $androidInstallations->selectWith($select)->current() ?: null;
+                    break;
                 case 'Windows':
-                    $windowsInstallations = $this->serviceLocator->get('Database\Table\WindowsInstallations');
+                    $windowsInstallations = $this->_serviceLocator->get('Database\Table\WindowsInstallations');
                     $select = $windowsInstallations->getSql()->select();
                     $select->columns(
                         array(
@@ -148,28 +167,29 @@ class Client extends \Model\ClientOrGroup
                             'owner',
                             'product_key',
                             'product_id',
-                            'manual_product_key'
+                            'manual_product_key',
+                            'cpu_architecture',
                         )
                     );
                     $select->where(array('client_id' => $this['Id']));
                     $value = $windowsInstallations->selectWith($select)->current() ?: null;
                     break;
                 case 'CustomFields':
-                    $value = $this->serviceLocator->get('Model\Client\CustomFieldManager')->read($this['Id']);
+                    $value = $this->_serviceLocator->get('Model\Client\CustomFieldManager')->read($this['Id']);
                     break;
                 case 'IsSerialBlacklisted':
-                    $duplicateSerials = $this->serviceLocator->get('Database\Table\DuplicateSerials');
+                    $duplicateSerials = $this->_serviceLocator->get('Database\Table\DuplicateSerials');
                     $value = (bool) $duplicateSerials->select(array('serial' => $this['Serial']))->count();
                     break;
                 case 'IsAssetTagBlacklisted':
-                    $duplicateAssetTags = $this->serviceLocator->get('Database\Table\DuplicateAssetTags');
+                    $duplicateAssetTags = $this->_serviceLocator->get('Database\Table\DuplicateAssetTags');
                     $value = (bool) $duplicateAssetTags->select(array('assettag' => $this['AssetTag']))->count();
                     break;
                 default:
-                    $value = $this->getItems($index);
+                    $value = $this->getItems($key);
             }
             // Cache result
-            $this->offsetSet($index, $value);
+            $this->offsetSet($key, $value);
         }
         return $value;
     }
@@ -182,7 +202,7 @@ class Client extends \Model\ClientOrGroup
             return $this->_configDefault[$option];
         }
 
-        $config = $this->serviceLocator->get('Model\Config');
+        $config = $this->_serviceLocator->get('Model\Config');
 
         // Get non-NULL values from groups
         $groupValues = array();
@@ -256,6 +276,17 @@ class Client extends \Model\ClientOrGroup
         return $config;
     }
 
+    /** {@inheritdoc} */
+    public function getExplicitConfig()
+    {
+        $config = parent::getExplicitConfig();
+        $scanThisNetwork = $this->getConfig('scanThisNetwork');
+        if ($scanThisNetwork !== null) {
+            $config['scanThisNetwork'] = $scanThisNetwork;
+        }
+        return $config;
+    }
+
     /**
      * Get effective configuration value
      *
@@ -290,7 +321,7 @@ class Client extends \Model\ClientOrGroup
 
         switch ($option) {
             case 'inventoryInterval':
-                $globalValue = $this->serviceLocator->get('Model\Config')->inventoryInterval;
+                $globalValue = $this->_serviceLocator->get('Model\Config')->inventoryInterval;
                 // Special global values 0 and -1 always take precedence.
                 if ($globalValue <= 0) {
                     $value = $globalValue;
@@ -344,45 +375,38 @@ class Client extends \Model\ClientOrGroup
     /**
      * Get package assignments
      *
-     * @param string $order Package assignment property to sort by, default: PackageName
+     * @param string $order Package assignment property to sort by, default: packageName
      * @param string $direction asc|desc, default: asc
-     * @return \Zend\Db\ResultSet\AbstractResultSet Result set producing \Model\Package\Assignment
+     * @return iterable<Assignment>
      */
-    public function getPackageAssignments($order='PackageName', $direction='asc')
+    public function getPackageAssignments(string $order = 'packageName', string $direction = 'asc'): iterable
     {
-        $hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $hydrator = new ObjectPropertyHydrator();
         $hydrator->setNamingStrategy(
-            new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
-                array(
-                    'name' => 'PackageName',
-                    'tvalue' => 'Status',
-                    'comments' => 'Timestamp',
-                )
-            )
+            new MapNamingStrategy([
+                'name' => 'packageName',
+                'tvalue' => 'status',
+                'comments' => 'timestamp',
+            ])
         );
         $hydrator->addStrategy(
-            'Timestamp',
-            new \Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy(
-                \Model\Package\Assignment::DATEFORMAT
-            )
+            'timestamp',
+            new DateTimeFormatterStrategy(Assignment::DATEFORMAT)
         );
 
-        $sql = $this->serviceLocator->get('Database\Table\ClientConfig')->getSql();
+        $sql = $this->_serviceLocator->get(ClientConfig::class)->getSql();
         $select = $sql->select();
-        $select->columns(array('tvalue', 'comments'))
+        $select->columns(['tvalue', 'comments'])
                ->join(
                    'download_available',
                    'download_available.fileid = devices.ivalue',
-                   array('name'),
-                   \Zend\Db\Sql\Select::JOIN_INNER
+                   ['name'],
+                   Select::JOIN_INNER
                )
-               ->where(array('hardware_id' => $this['Id'], 'devices.name' => 'DOWNLOAD'))
-               ->order(array($hydrator->extractName($order) => $direction));
+               ->where(['hardware_id' => $this['Id'], 'devices.name' => 'DOWNLOAD'])
+               ->order([$hydrator->extractName($order) => $direction]);
 
-        $resultSet = new \Zend\Db\ResultSet\HydratingResultSet(
-            $hydrator,
-            clone $this->serviceLocator->get('Model\Package\Assignment')
-        );
+        $resultSet = new HydratingResultSet($hydrator, new Assignment());
         $resultSet->initialize($sql->prepareStatementForSqlObject($select)->execute());
 
         return $resultSet;
@@ -395,12 +419,76 @@ class Client extends \Model\ClientOrGroup
      */
     public function getDownloadedPackageIds()
     {
-        $packageHistory = $this->serviceLocator->get('Database\Table\PackageHistory');
+        $packageHistory = $this->_serviceLocator->get('Database\Table\PackageHistory');
         $select = $packageHistory->getSql()->select();
         $select->columns(array('pkg_id'))
                ->where(array('hardware_id' => $this['Id']))
                ->order('pkg_id');
         return array_column($packageHistory->selectWith($select)->toArray(), 'pkg_id');
+    }
+
+    /**
+     * Reset status of a package to "pending"
+     *
+     * @param string $name Package name
+     */
+    public function resetPackage($name)
+    {
+        $package = $this->_serviceLocator->get('Model\Package\PackageManager')->getPackage($name);
+        $clientConfig = $this->_serviceLocator->get('Database\Table\ClientConfig');
+
+        // Common filter for all operations
+        $where = [
+            'hardware_id' => $this['Id'],
+            'ivalue' => $package['Id'],
+        ];
+
+        $connection = $clientConfig->getAdapter()->getDriver()->getConnection();
+        $connection->beginTransaction();
+        try {
+            $select = $clientConfig->getSql()->select();
+            $select->columns(['num' => new \Laminas\Db\Sql\Literal('COUNT(*)')]);
+            $select->where($where);
+            $select->where(['name' => 'DOWNLOAD']);
+            if ($clientConfig->selectWith($select)->current()['num'] != 1) {
+                throw new \RuntimeException(
+                    sprintf('Package "%s" is not assigned to client %d', $name, $this['Id'])
+                );
+            }
+
+            // Create DOWNLOAD_FORCE row if it does not already exist. This row
+            // is required for overriding the client's package history.
+            $select = $clientConfig->getSql()->select();
+            $select->columns(array('num' => new \Laminas\Db\Sql\Literal('COUNT(*)')));
+            $select->where($where);
+            $select->where(array('name' => 'DOWNLOAD_FORCE'));
+            if ($clientConfig->selectWith($select)->current()['num'] != 1) {
+                $clientConfig->insert(
+                    array(
+                        'hardware_id' => $this['Id'],
+                        'name' => 'DOWNLOAD_FORCE',
+                        'ivalue' => $package['Id'],
+                        'tvalue' => '1',
+                    )
+                );
+            }
+
+            // Reset assignment row
+            $clientConfig->update(
+                array(
+                    'tvalue' => \Model\Package\Assignment::PENDING,
+                    'comments' => $this->_serviceLocator->get('Library\Now')->format(
+                        \Model\Package\Assignment::DATEFORMAT
+                    ),
+                ),
+                $where + array('name' => 'DOWNLOAD')
+            );
+
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
     }
 
     /**
@@ -410,13 +498,16 @@ class Client extends \Model\ClientOrGroup
      * @param string $order Property to sort by. Default: item-specific
      * @param string $direction Sorting direction (asc|desc)
      * @param array $filters Extra filters for ItemManager::getItems()
-     * @return \Zend\Db\ResultSet\AbstractResultSet
+     * @return \Laminas\Db\ResultSet\AbstractResultSet
      */
-    public function getItems($type, $order=null, $direction=null, $filters=array())
+    public function getItems($type, $order = null, $direction = null, $filters = array())
     {
         $filters['Client'] = $this['Id'];
-        return $this->serviceLocator->get('Model\Client\ItemManager')->getItems(
-            $type, $filters, $order, $direction
+        return $this->_serviceLocator->get('Model\Client\ItemManager')->getItems(
+            $type,
+            $filters,
+            $order,
+            $direction
         );
     }
 
@@ -430,12 +521,12 @@ class Client extends \Model\ClientOrGroup
      */
     public function setGroupMemberships($newMemberships)
     {
-        $groupMemberships = $this->serviceLocator->get('Database\Table\GroupMemberships');
+        $groupMemberships = $this->_serviceLocator->get('Database\Table\GroupMemberships');
 
         // Build lookup tables
         $groupsById = array();
         $groupsByName = array();
-        foreach ($this->serviceLocator->get('Model\Group\GroupManager')->getGroups() as $group) {
+        foreach ($this->_serviceLocator->get('Model\Group\GroupManager')->getGroups() as $group) {
             $groupsById[$group['Id']] = $group;
             $groupsByName[$group['Name']] = $group;
         }
@@ -460,7 +551,8 @@ class Client extends \Model\ClientOrGroup
             }
             switch ($newMembership) {
                 case self::MEMBERSHIP_AUTOMATIC:
-                    if ($oldMembership === self::MEMBERSHIP_ALWAYS or
+                    if (
+                        $oldMembership === self::MEMBERSHIP_ALWAYS or
                         $oldMembership === self::MEMBERSHIP_NEVER
                     ) {
                         // Delete manual membership and update group cache
@@ -519,7 +611,7 @@ class Client extends \Model\ClientOrGroup
      */
     public function getGroupMemberships($membershipType)
     {
-        $groupMemberships = $this->serviceLocator->get('Database\Table\GroupMemberships');
+        $groupMemberships = $this->_serviceLocator->get('Database\Table\GroupMemberships');
         $select = $groupMemberships->getSql()->select();
         $select->columns(array('group_id', 'static'));
 
@@ -528,7 +620,7 @@ class Client extends \Model\ClientOrGroup
                 break;
             case self::MEMBERSHIP_MANUAL:
                 $select->where(
-                    new \Zend\Db\Sql\Predicate\Operator('static', '!=', self::MEMBERSHIP_AUTOMATIC)
+                    new \Laminas\Db\Sql\Predicate\Operator('static', '!=', self::MEMBERSHIP_AUTOMATIC)
                 );
                 break;
             case self::MEMBERSHIP_AUTOMATIC:
@@ -541,11 +633,11 @@ class Client extends \Model\ClientOrGroup
         }
         $select->where(array('hardware_id' => $this['Id']));
 
-        $this->serviceLocator->get('Model\Group\GroupManager')->updateCache();
+        $this->_serviceLocator->get('Model\Group\GroupManager')->updateCache();
 
         $result = array();
         foreach ($groupMemberships->selectWith($select) as $row) {
-            $result[(integer) $row['group_id']] = (integer) $row['static'];
+            $result[(int) $row['group_id']] = (int) $row['static'];
         }
         return $result;
     }
@@ -561,7 +653,7 @@ class Client extends \Model\ClientOrGroup
     {
         if ($this->_groups === null) {
             $this->_groups = iterator_to_array(
-                $this->serviceLocator->get('Model\Group\GroupManager')->getGroups('Member', $this['Id'])
+                $this->_serviceLocator->get('Model\Group\GroupManager')->getGroups('Member', $this['Id'])
             );
         }
         return $this->_groups;
@@ -573,7 +665,7 @@ class Client extends \Model\ClientOrGroup
      */
     public function setCustomFields($values)
     {
-        $this->serviceLocator->get('Model\Client\CustomFieldManager')->write($this['Id'], $values);
+        $this->_serviceLocator->get('Model\Client\CustomFieldManager')->write($this['Id'], $values);
     }
 
     /**
@@ -583,8 +675,9 @@ class Client extends \Model\ClientOrGroup
      */
     public function toDomDocument()
     {
-        $document = clone $this->serviceLocator->get('Protocol\Message\InventoryRequest');
-        $document->loadClient($this, $this->serviceLocator);
+        $document = $this->_serviceLocator->get(\Protocol\Message\InventoryRequest::class);
+        $document->formatOutput = true;
+        $document->loadClient($this);
         return $document;
     }
 }

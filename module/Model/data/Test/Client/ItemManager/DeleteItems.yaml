@@ -24,6 +24,10 @@ inputs:
   -
     hardware_id: 2
 
+javainfos:
+  -
+    hardware_id: 5
+
 memories:
   -
     hardware_id: 2
@@ -64,7 +68,11 @@ slots:
   -
     hardware_id: 2
 
-softwares:
+software:
+  -
+    hardware_id: 2
+
+software_installations:
   -
     hardware_id: 2
 
@@ -75,6 +83,8 @@ sounds:
 storages:
   -
     hardware_id: 2
+  -
+    hardware_id: 5
 
 videos:
   -

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Validate string as an MS product key
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,14 +28,13 @@ namespace Library\Validator;
  * A valid product key has 5 groups of 5 upper case characters or digits,
  * separated by dashes, i.e. AAAAA-AAAAA-AAAAA-AAAAA-AAAAA.
  */
-class ProductKey extends \Zend\Validator\AbstractValidator
+class ProductKey extends \Laminas\Validator\AbstractValidator
 {
     /**
      * Key for message template
      */
     const PRODUCT_KEY = 'productKey';
 
-    // @codingStandardsIgnoreStart
     /**
      * Validation failure message template definitions
      * @var string[]
@@ -42,10 +42,6 @@ class ProductKey extends \Zend\Validator\AbstractValidator
     protected $messageTemplates = array(
         self::PRODUCT_KEY => "'%value%' is not a valid product key",
     );
-
-    /** {@inheritdoc} */
-    protected static $defaultTranslatorTextDomain = 'default';
-    // @codingStandardsIgnoreEnd
 
     /**
      * Returns TRUE if $value is a valid product key

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for \Library\Form\Element\SelectSimple
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,13 +25,13 @@ namespace Library\Test\Form\Element;
 /**
  * Tests for \Library\Form\Element\SelectSimple
  */
-class SelectSimpleTest extends \PHPUnit_Framework_TestCase
+class SelectSimpleTest extends \PHPUnit\Framework\TestCase
 {
     public function testInArrayValidator()
     {
-        $element = new \Library\Form\Element\SelectSimple;
+        $element = new \Library\Form\Element\SelectSimple();
         $element->setValueOptions(array('option1', 'option2'));
-        $factory = new \Zend\InputFilter\Factory;
+        $factory = new \Laminas\InputFilter\Factory();
         $input = $factory->createInput($element->getInputSpecification());
         $input->setValue('option1');
         $this->assertTrue($input->isValid());
@@ -42,12 +43,12 @@ class SelectSimpleTest extends \PHPUnit_Framework_TestCase
 
     public function testUncallableCode()
     {
-        $this->setExpectedException(
+        $this->expectException(
             'LogicException',
             'Library\Form\Element\SelectSimple::getOptionValue() should never be called'
         );
         $method = new \ReflectionMethod('Library\Form\Element\SelectSimple', 'getOptionValue');
         $method->setAccessible(true);
-        $method->invoke(new \Library\Form\Element\SelectSimple, '', array());
+        $method->invoke(new \Library\Form\Element\SelectSimple(), '', array());
     }
 }

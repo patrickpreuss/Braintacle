@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Storage device (hard disk, optical drive, USB storage...)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,14 +25,14 @@ namespace Model\Client\Item;
 /**
  * Storage device (hard disk, optical drive, USB storage...)
  *
- * @property string $Type Hard disk, DVD writer... (Windows only)
- * @property string $ProductFamily Manufacturer/Series (UNIX only)
- * @property string $Model Model description (supplied by manufacturer)
+ * @property string $Type Windows: Hard disk, DVD writer..., Android: Internal/External storage
+ * @property string $ProductFamily Manufacturer/Series (UNIX)
+ * @property string $ProductName Product name, supplied by manufacturer (Windows/UNIX)
  * @property string $Device Windows: Device path (ex. "//./PHYSICALDRIVE0") for hard disks, UNIX: device node
  * @property integer $Size Size in MB
- * @property string $Serial Serial number
- * @property string $Firmware Firmware version
+ * @property string $Serial Serial number (Windows/UNIX)
+ * @property string $Firmware Firmware version (Windows/UNIX)
  */
-class StorageDevice extends \ArrayObject
+class StorageDevice extends \Model\AbstractModel
 {
 }

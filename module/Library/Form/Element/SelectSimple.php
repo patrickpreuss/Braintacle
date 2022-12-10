@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Select element with simplified options (no value attributes)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -29,10 +30,9 @@ namespace Library\Form\Element;
  * without the "value" attribute. The helper is registered with the
  * FormElement helper to render the element correctly.
  */
-class SelectSimple extends \Zend\Form\Element\Select
+class SelectSimple extends \Laminas\Form\Element\Select
 {
-    /** {@inheritdoc} */
-    protected function getValueOptionsValues()
+    protected function getValueOptionsValues(): array
     {
         // Override parent method - return values for InArray validator
         return $this->getValueOptions();

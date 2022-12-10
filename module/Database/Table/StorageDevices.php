@@ -1,4 +1,5 @@
 <?php
+
 /**
  * "storages" table
  *
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "storages" table
@@ -30,13 +31,13 @@ class StorageDevices extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'storages';
 
-        $this->_hydrator = new \Database\Hydrator\StorageDevices;
+        $this->_hydrator = new \Database\Hydrator\StorageDevices();
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
             $this->_hydrator,
             $serviceLocator->get('Model\Client\Item\StorageDevice')
         );

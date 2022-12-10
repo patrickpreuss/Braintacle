@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Factory for Model\Operator\AuthenticationService
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,22 +25,20 @@ namespace Model\Service\Operator;
 /**
  * Factory for Model\Operator\AuthenticationService
  */
-class AuthenticationServiceFactory implements \Zend\ServiceManager\FactoryInterface
+class AuthenticationServiceFactory implements \Laminas\ServiceManager\Factory\FactoryInterface
 {
     /**
-     * @internal
+     * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function createService(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
-    {
+    public function __invoke(
+        \Interop\Container\ContainerInterface $container,
+        $requestedName,
+        array $options = null
+    ) {
         return new \Model\Operator\AuthenticationService(
             null,
-            new \Zend\Authentication\Adapter\DbTable\CredentialTreatmentAdapter(
-                $serviceLocator->get('Db'),
-                'operators',
-                'id',
-                'passwd'
-            )
+            new \Model\Operator\AuthenticationAdapter($container->get('Database\Table\Operators'))
         );
     }
 }

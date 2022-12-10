@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for view helper tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,62 +22,83 @@
 
 namespace Library\Test\View\Helper;
 
-use Library\Application;
-
 /**
  * Base class for view helper tests
  *
  * Tests for view helper classes can derive from this class for some convenience
  * functions. Additionally, the testHelperInterface() test is executed for all
- * derived tests. 
+ * derived tests.
  */
-abstract class AbstractTest extends \PHPUnit_Framework_TestCase
+abstract class AbstractTest extends \Mockery\Adapter\Phpunit\MockeryTestCase
 {
     /**
+     * Service manager
+     * @var \Laminas\ServiceManager\ServiceManager
+     */
+    public static $serviceManager;
+
+    /**
+     * View helper manager
+     * @var \Laminas\View\HelperPluginManager
+     */
+    protected static $_helperManager;
+
+    public static function setUpBeforeClass(): void
+    {
+        parent::setUpBeforeClass();
+
+        static::$_helperManager = static::$serviceManager->get('ViewHelperManager');
+    }
+
+    /**
      * Get the name of the view helper, derived from the test class name
-     * 
+     *
      * @return string Helper name
      */
-    protected function _getHelperName()
+    protected function getHelperName()
     {
         // Derive helper name from test class name (minus namespace and 'Test' suffix)
-        return substr(strrchr(get_class($this), '\\'), 1, -4);
+        return lcfirst(substr(strrchr(get_class($this), '\\'), 1, -4));
     }
 
     /**
      * Get the name of the view helper class, derived from the test class name
-     * 
-     * @return string Helper name
+     *
+     * @return string Helper class name
      */
-    protected function _getHelperClass()
+    protected static function getHelperClass()
     {
         // Derive helper class from test class name (minus \Test namespace and 'Test' suffix)
-        return substr(str_replace('\Test', '', get_class($this)), 0, -4);
+        return substr(str_replace('\Test', '', get_called_class()), 0, -4);
     }
 
     /**
      * Get view helper
      *
      * @param string $name Helper name (default: derive from test class name)
-     * @return \Zend\View\Helper\HelperInterface Helper instance
      */
-    protected function _getHelper($name=null)
+    protected function getHelper($name = null): callable
     {
         if (!$name) {
-            $name = $this->_getHelperName();
+            $name = $this->getHelperName();
         }
-        return \Library\Application::getService('ViewHelperManager')->get($name);
+        return static::$_helperManager->build($name);
     }
 
     /**
      * Test if the helper is properly registered with the service manager
      */
-    public function testHelperInterface()
+    public function testHelperService()
     {
-        // Test if the helper is registered with the application's service manager
-        $this->assertTrue(\Library\Application::getService('ViewHelperManager')->has($this->_getHelperName()));
-
-        // Get helper instance through service manager and test for required interface
-        $this->assertInstanceOf('Zend\View\Helper\HelperInterface', $this->_getHelper());
+        // Uppercase
+        $this->assertInstanceOf(
+            static::getHelperClass(),
+            $this->getHelper($this->getHelperName())
+        );
+        // Lowercase
+        $this->assertInstanceOf(
+            static::getHelperClass(),
+            $this->getHelper(lcfirst($this->getHelperName()))
+        );
     }
 }

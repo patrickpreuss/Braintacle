@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "download_available" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "download_available" table
@@ -32,7 +33,7 @@ class Packages extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'download_available';
 
@@ -44,23 +45,24 @@ class Packages extends \Database\AbstractTable
             'size' => 'Size',
             'osname' => 'Platform',
             'comment' => 'Comment',
-            'num_nonnotified' => 'NumNonnotified',
+            'num_pending' => 'NumPending',
+            'num_running' => 'NumRunning',
             'num_success' => 'NumSuccess',
-            'num_notified' => 'NumNotified',
             'num_error' => 'NumError',
         );
-        $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $this->_hydrator->setNamingStrategy(
             new \Database\Hydrator\NamingStrategy\MapNamingStrategy($map)
         );
         $this->_hydrator->addFilter('whitelist', new \Library\Hydrator\Filter\Whitelist($map));
 
-        $platform = new \Database\Hydrator\Strategy\Packages\Platform;
+        $platform = new \Database\Hydrator\Strategy\Packages\Platform();
         $this->_hydrator->addStrategy('Platform', $platform);
         $this->_hydrator->addStrategy('osname', $platform);
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
-            $this->_hydrator, $serviceLocator->get('Model\Package\Package')
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
+            $this->_hydrator,
+            $serviceLocator->get('Model\Package\Package')
         );
         parent::__construct($serviceLocator);
     }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\ClientOrGroup
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,30 +22,39 @@
 
 namespace Model\Test;
 
+use Database\Table\ClientConfig;
+use Laminas\Db\Adapter\Driver\ConnectionInterface;
+use Mockery;
+use Model\ClientOrGroup;
+use PHPUnit\Framework\MockObject\MockObject;
+
 class ClientOrGroupTest extends AbstractTest
 {
+    use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+
     /** {@inheritdoc} */
     protected static $_tables = array('ClientConfig', 'Locks', 'PackageHistory', 'Packages');
 
     protected $_currentTimestamp;
 
     /** {@inheritdoc} */
-    protected function _loadDataSet($testName=null)
+    protected function loadDataSet($testName = null)
     {
         // Get current time from database as reference point for all operations.
         $this->_currentTimestamp = new \DateTime(
             $this->getConnection()->createQueryTable(
-                'current', 'SELECT CURRENT_TIMESTAMP AS current'
+                'current',
+                'SELECT CURRENT_TIMESTAMP AS current'
             )->getValue(0, 'current'),
             new \DateTimeZone('UTC')
         );
 
-        $dataSet = parent::_loadDataSet($testName);
-        $locks = $dataSet->getTable('locks');
-        if ($locks) {
+        $dataSet = parent::loadDataSet($testName);
+        if (in_array('locks', $dataSet->getTableNames())) {
             // Replace offsets with timestamps (current - offset)
+            $locks = $dataSet->getTable('locks');
             $count = $locks->getRowCount();
-            $replacement = new \PHPUnit_Extensions_Database_DataSet_ReplacementDataSet($dataSet);
+            $replacement = new \PHPUnit\DbUnit\DataSet\ReplacementDataSet($dataSet);
             for ($i = 0; $i < $count; $i++) {
                 $offset = $locks->getValue($i, 'since');
                 $interval = new \DateInterval(sprintf('PT%dS', trim($offset, '#')));
@@ -59,15 +69,24 @@ class ClientOrGroupTest extends AbstractTest
     }
 
     /**
+     * Compose a ClientOrGroup mock with stubs for the given methods.
+     */
+    public function composeMock(array $mockedMethods = ['__destruct']): MockObject
+    {
+        return $this->getMockForAbstractClass(ClientOrGroup::class, [], '', false, true, true, $mockedMethods);
+    }
+
+    /**
      * Compare "locks" table with dataset using fuzzy timestamp match
      *
      * @param string $dataSetName Name of dataset file to compare
      */
-    public function assertLocksTableEquals($dataSetName)
+    public function assertLocksTableEquals(?string $dataSetName)
     {
-        $dataSetTable = $this->_loadDataSet($dataSetName)->getTable('locks');
+        $dataSetTable = $this->loadDataSet($dataSetName)->getTable('locks');
         $queryTable = $this->getConnection()->createQueryTable(
-            'locks', 'SELECT hardware_id, since FROM locks ORDER BY hardware_id'
+            'locks',
+            'SELECT hardware_id, since FROM locks ORDER BY hardware_id'
         );
         $count = $dataSetTable->getRowCount();
         $this->assertEquals($count, $queryTable->getRowCount());
@@ -89,29 +108,27 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testDestructor()
     {
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('unlock'))->getMockForAbstractClass();
+        $model = $this->composeMock(['unlock']);
         $model->expects($this->once())->method('unlock');
         $model->__destruct();
     }
 
     public function testDestructorWithNestedLocks()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('__get')->with('lockValidity')->willReturn(42);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Database\Table\Locks', true, \Library\Application::getService('Database\Table\Locks')),
-                    array('Db', true, \Library\Application::getService('Db')),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Database\Table\Locks', static::$serviceManager->get('Database\Table\Locks')),
+                array('Db', static::$serviceManager->get('Db')),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->getMockForAbstractClass();
+        $model = $this->getMockBuilder($this->getClass())->getMockForAbstractClass();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 23;
 
@@ -135,67 +152,50 @@ class ClientOrGroupTest extends AbstractTest
      */
     public function testLockWithDatabaseTime($id, $timeout, $success, $dataSetName)
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->expects($this->once())->method('__get')->with('lockValidity')->willreturn($timeout);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Database\Table\Locks', true, \Library\Application::getService('Database\Table\Locks')),
-                    array('Db', true, \Library\Application::getService('Db')),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Database\Table\Locks', static::$serviceManager->get('Database\Table\Locks')),
+                array('Db', static::$serviceManager->get('Db')),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = $id;
 
         $this->assertSame($success, $model->lock());
-
-        // Reuse $_currentTimestamp before it gets overwritten by _loadDataSet()
-        $expire = new \ReflectionProperty($model, '_lockTimeout');
-        $expire->setAccessible(true);
-        if ($success) {
-            $this->assertThat(
-                $expire->getValue($model)->getTimestamp(),
-                $this->equalTo($this->_currentTimestamp->getTimestamp() + $timeout, 1) // fuzzy match
-            );
-        } else {
-            $this->assertNull($expire->getValue($model));
-        }
-
         $this->assertLocksTableEquals($dataSetName);
     }
 
     public function testLockRaceCondition()
     {
-        $sql = $this->getMockBuilder('\Zend\Db\Sql\Sql')->disableOriginalConstructor()->getMock();
-        $sql->method('select')->willReturn(new \Zend\Db\Sql\Select);
+        $sql = $this->createMock('\Laminas\Db\Sql\Sql');
+        $sql->method('select')->willReturn(new \Laminas\Db\Sql\Select());
 
-        $locks = $this->getMockBuilder('Database\Table\Locks')->disableOriginalConstructor()->getMock();
+        $locks = $this->createMock('Database\Table\Locks');
         $locks->method('getSql')->willReturn($sql);
-        $locks->method('selectWith')->willReturn(new \ArrayIterator);
+        $locks->method('selectWith')->willReturn(new \ArrayIterator());
         $locks->method('insert')->will($this->throwException(new \RuntimeException('race condition')));
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Database\Table\Locks', true, $locks),
-                    array('Db', true, \Library\Application::getService('Db')),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Database\Table\Locks', $locks),
+                array('Db', static::$serviceManager->get('Db')),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 42;
 
@@ -204,29 +204,23 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testUnlockWithoutLock()
     {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'isLocked'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'isLocked']);
         $model->expects($this->once())->method('isLocked')->willReturn(false);
         $model->unlock();
     }
 
     public function testUnlockWithReleasedLock()
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Database\Table\Locks', true, \Library\Application::getService('Database\Table\Locks')),
-                    array('Db', true, \Library\Application::getService('Db')),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Database\Table\Locks', static::$serviceManager->get('Database\Table\Locks')),
+                array('Db', static::$serviceManager->get('Db')),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'isLocked'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'isLocked']);
         $model->expects($this->once())->method('isLocked')->willReturn(true);
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 1;
@@ -245,19 +239,15 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testUnlockWithExpiredLock()
     {
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Db', true, \Library\Application::getService('Db')),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Db', static::$serviceManager->get('Db')),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'isLocked'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'isLocked']);
         $model->expects($this->once())->method('isLocked')->willReturn(true);
         $model->setServiceLocator($serviceManager);
 
@@ -271,7 +261,7 @@ class ClientOrGroupTest extends AbstractTest
         try {
             $model->unlock();
             $this->fail('Expected exception was not thrown.');
-        } catch (\PHPUnit_Framework_Error_Warning $e) {
+        } catch (\PHPUnit\Framework\Error\Warning $e) {
             $this->assertEquals('Lock expired prematurely. Increase lock lifetime.', $e->getMessage());
         }
         $this->assertLocksTableEquals(null);
@@ -280,13 +270,13 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testIsLockedFalse()
     {
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $this->assertFalse($model->isLocked());
     }
 
     public function testIsLockedTrue()
     {
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
 
         $expire = new \ReflectionProperty($model, '_lockNestCount');
         $expire->setAccessible(true);
@@ -297,22 +287,20 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testNestedLocks()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('__get')->with('lockValidity')->willReturn(42);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Nada', true, \Library\Application::getService('Database\Nada')),
-                    array('Database\Table\Locks', true, \Library\Application::getService('Database\Table\Locks')),
-                    array('Db', true, \Library\Application::getService('Db')),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Nada', static::$serviceManager->get('Database\Nada')),
+                array('Database\Table\Locks', static::$serviceManager->get('Database\Table\Locks')),
+                array('Db', static::$serviceManager->get('Db')),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 23;
 
@@ -326,8 +314,8 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testGetAssignablePackages()
     {
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
-        $model->setServiceLocator(\Library\Application::getService('ServiceManager'));
+        $model = $this->composeMock();
+        $model->setServiceLocator(static::$serviceManager);
         $model['Id'] = 1;
         $this->assertEquals(array('package1', 'package3'), $model->getAssignablePackages());
     }
@@ -345,34 +333,27 @@ class ClientOrGroupTest extends AbstractTest
      */
     public function testAssignPackage($name, $id, $dataSet)
     {
-        $packageManager = $this->getMockBuilder('Model\Package\PackageManager')
-                               ->disableOriginalConstructor()
-                               ->getMock();
+        $packageManager = $this->createMock('Model\Package\PackageManager');
         $packageManager->method('getPackage')
                        ->with($name)
                        ->willReturn(array('Id' => $id));
 
-        $now = $this->getMock('DateTime');
+        $now = $this->createMock('DateTime');
         $now->method('format')->with('D M d H:i:s Y')->willReturn('current timestamp');
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
                 array(
-                    array(
-                        'Database\Table\ClientConfig',
-                        true,
-                        \Library\Application::getService('Database\Table\ClientConfig')
-                    ),
-                    array('Library\Now', true, $now),
-                    array('Model\Package\PackageManager', true, $packageManager),
-                )
+                    'Database\Table\ClientConfig',
+                    static::$serviceManager->get('Database\Table\ClientConfig')
+                ),
+                array('Library\Now', $now),
+                array('Model\Package\PackageManager', $packageManager),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'getAssignablePackages'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'getAssignablePackages']);
         $model->method('getAssignablePackages')->willReturn(array('package1', 'package3'));
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 1;
@@ -384,7 +365,7 @@ class ClientOrGroupTest extends AbstractTest
             $where = '';
         }
         $this->assertTablesEqual(
-            $this->_loadDataSet($dataSet)->getTable('devices'),
+            $this->loadDataSet($dataSet)->getTable('devices'),
             $this->getConnection()->createQueryTable(
                 'devices',
                 'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ' . $where .
@@ -395,34 +376,29 @@ class ClientOrGroupTest extends AbstractTest
 
     public function testRemovePackage()
     {
-        $packageManager = $this->getMockBuilder('Model\Package\PackageManager')
-                               ->disableOriginalConstructor()
-                               ->getMock();
+        $packageManager = $this->createMock('Model\Package\PackageManager');
         $packageManager->method('getPackage')
                        ->with('package5')
                        ->willReturn(array('Id' => 5));
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
                 array(
-                    array(
-                        'Database\Table\ClientConfig',
-                        true,
-                        \Library\Application::getService('Database\Table\ClientConfig')
-                    ),
-                    array('Model\Package\PackageManager', true, $packageManager),
-                )
+                    'Database\Table\ClientConfig',
+                    static::$serviceManager->get('Database\Table\ClientConfig')
+                ),
+                array('Model\Package\PackageManager', $packageManager),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 1;
         $model->removePackage('package5');
 
         $this->assertTablesEqual(
-            $this->_loadDataSet('RemovePackage')->getTable('devices'),
+            $this->loadDataSet('RemovePackage')->getTable('devices'),
             $this->getConnection()->createQueryTable(
                 'devices',
                 'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ' .
@@ -452,37 +428,30 @@ class ClientOrGroupTest extends AbstractTest
      */
     public function testGetConfig($id, $option, $value)
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('getDbIdentifier')->with('inventoryInterval')->willReturn('FREQUENCY');
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
                 array(
-                    array(
-                        'Database\Table\ClientConfig',
-                        true,
-                        \Library\Application::getService('Database\Table\ClientConfig')
-                    ),
-                    array('Model\Config', true, $config),
-                )
+                    'Database\Table\ClientConfig',
+                    static::$serviceManager->get('Database\Table\ClientConfig')
+                ),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model->setServiceLocator($serviceManager);
         $model['Id'] = $id;
 
         $this->assertSame($value, $model->getConfig($option));
-
-        $cache = new \ReflectionProperty($model, '_configCache');
-        $cache->setAccessible(true);
-        $this->assertSame($value, $cache->getValue($model)[$option]);
     }
 
     public function testGetConfigCached()
     {
-        $model = $this->getMockBuilder($this->_getClass())->setMethods(array('__destruct'))->getMockForAbstractClass();
+        $model = $this->composeMock();
         $model['Id'] = 42;
 
         $cache = new \ReflectionProperty($model, '_configCache');
@@ -514,25 +483,20 @@ class ClientOrGroupTest extends AbstractTest
      */
     public function testSetConfig($id, $option, $identifier, $value, $oldValue, $normalizedValue, $dataSet)
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('getDbIdentifier')->with($option)->willReturn($identifier);
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\ClientConfig',
-                        true,
-                        \Library\Application::getService('Database\Table\ClientConfig')
-                    ),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Table\ClientConfig',
+                    static::$serviceManager->get('Database\Table\ClientConfig')
+                ),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'getConfig'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'getConfig']);
         if ($normalizedValue === null) {
             $model->expects($this->never())->method('getConfig');
         } else {
@@ -543,61 +507,78 @@ class ClientOrGroupTest extends AbstractTest
 
         $model->setConfig($option, $value);
         $this->assertTablesEqual(
-            $this->_loadDataSet($dataSet)->getTable('devices'),
+            $this->loadDataSet($dataSet)->getTable('devices'),
             $this->getConnection()->createQueryTable(
                 'devices',
                 'SELECT hardware_id, name, ivalue, tvalue, comments FROM devices ' .
-                'WHERE hardware_id >= 10 ORDER BY hardware_id, name'
+                'WHERE hardware_id >= 10 ORDER BY hardware_id, name, ivalue'
             )
         );
-
-        $cache = new \ReflectionProperty($model, '_configCache');
-        $cache->setAccessible(true);
-        $this->assertSame($normalizedValue, $cache->getValue($model)[$option]);
     }
 
     public function testSetConfigUnchanged()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        $config = $this->createMock('Model\Config');
         $config->method('getDbIdentifier')->with('inventoryInterval')->willReturn('FREQUENCY');
 
-        $clientConfig = $this->getMockBuilder('Database\Table\ClientConfig')->disableOriginalConstructor()->getMock();
-        $clientConfig->method('getAdapter')->willReturn(\Library\Application::getService('Db'));
+        $clientConfig = $this->createMock('Database\Table\ClientConfig');
+        $clientConfig->method('getAdapter')->willReturn(static::$serviceManager->get('Db'));
         $clientConfig->expects($this->never())->method('insert');
         $clientConfig->expects($this->never())->method('update');
         $clientConfig->expects($this->never())->method('delete');
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
-        $serviceManager->method('get')->will(
-            $this->returnValueMap(
-                array(
-                    array('Database\Table\ClientConfig', true, $clientConfig),
-                    array('Model\Config', true, $config),
-                )
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->willReturnMap(
+            array(
+                array('Database\Table\ClientConfig', $clientConfig),
+                array('Model\Config', $config),
             )
         );
 
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'getConfig'))
-                      ->getMockForAbstractClass();
+        $model = $this->composeMock(['__destruct', 'getConfig']);
         $model->expects($this->once())->method('getConfig')->with('inventoryInterval')->willReturn(23);
         $model->setServiceLocator($serviceManager);
         $model['Id'] = 10;
 
         $model->setConfig('inventoryInterval', '23');
+    }
 
-        $cache = new \ReflectionProperty($model, '_configCache');
-        $cache->setAccessible(true);
-        $this->assertSame(23, $cache->getValue($model)['inventoryInterval']);
+    public function testSetConfigRollbackOnException()
+    {
+        $connection = $this->createMock(ConnectionInterface::class);
+        $connection->expects($this->once())->method('beginTransaction');
+        $connection->expects($this->once())->method('rollback');
+        $connection->expects($this->never())->method('commit');
+
+        $driver = $this->createMock('Laminas\Db\Adapter\Driver\DriverInterface');
+        $driver->method('getConnection')->willReturn($connection);
+
+        $adapter = $this->createMock('Laminas\Db\Adapter\Adapter');
+        $adapter->method('getDriver')->willReturn($driver);
+
+        $clientConfig = $this->createMock(ClientConfig::class);
+        $clientConfig->method('getAdapter')->willReturn($adapter);
+        $clientConfig->method('delete')->willThrowException(new \RuntimeException('test message'));
+
+        $serviceManager = $this->createMock('Laminas\ServiceManager\ServiceManager');
+        $serviceManager->method('get')->with('Database\Table\ClientConfig')->willReturn($clientConfig);
+
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test message');
+
+        $model = $this->composeMock(['offsetGet']);
+        $model->method('offsetGet')->willReturn(1);
+        $model->setServiceLocator($serviceManager);
+        $model->setConfig('allowScan', null);
     }
 
     public function getAllConfigProvider()
     {
-        return array(
-            array(null, 0, 0, 1, 0, 0),
-            array(0, null, 0, 0, 1, 0),
-            array(0, 0, null, 0, 0, 1),
-        );
+        return [
+            [null, 0, 0, 1, 0, 0],
+            [0, null, 0, 0, 1, 0],
+            [0, 0, null, 0, 0, 1],
+        ];
     }
 
     /**
@@ -610,47 +591,108 @@ class ClientOrGroupTest extends AbstractTest
         $expectedPackageDeployment,
         $expectedAllowScan,
         $expectedScanSnmp
-    )
-    {
-        $model = $this->getMockBuilder($this->_getClass())
-                      ->setMethods(array('__destruct', 'getConfig'))
-                      ->getMockForAbstractClass();
-        $model->method('getConfig')->will(
-            $this->returnValueMap(
-                array(
-                    array('contactInterval', 2),
-                    array('inventoryInterval', 3),
-                    array('packageDeployment', $packageDeployment),
-                    array('downloadPeriodDelay', 4),
-                    array('downloadCycleDelay', 5),
-                    array('downloadFragmentDelay', 6),
-                    array('downloadMaxPriority', 7),
-                    array('downloadTimeout', 8),
-                    array('allowScan', $allowScan),
-                    array('scanSnmp', $scanSnmp),
-                )
-            )
-        );
+    ) {
+        $model = Mockery::mock(ClientOrGroup::class)->makePartial();
+        $model->shouldReceive('getConfig')->with('contactInterval')->andReturn(1);
+        $model->shouldReceive('getConfig')->with('inventoryInterval')->andReturn(2);
+        $model->shouldReceive('getConfig')->with('downloadPeriodDelay')->andReturn(3);
+        $model->shouldReceive('getConfig')->with('downloadCycleDelay')->andReturn(4);
+        $model->shouldReceive('getConfig')->with('downloadFragmentDelay')->andReturn(5);
+        $model->shouldReceive('getConfig')->with('downloadMaxPriority')->andReturn(6);
+        $model->shouldReceive('getConfig')->with('downloadTimeout')->andReturn(7);
+        // The following options can only be 0 or NULL
+        $model->shouldReceive('getConfig')->with('packageDeployment')->andReturn($packageDeployment);
+        $model->shouldReceive('getConfig')->with('allowScan')->andReturn($allowScan);
+        $model->shouldReceive('getConfig')->with('scanSnmp')->andReturn($scanSnmp);
+
         $this->assertSame(
-            array(
-                'Agent' => array(
-                    'contactInterval' => 2,
-                    'inventoryInterval' => 3,
-                ),
-                'Download' => array(
+            [
+                'Agent' => [
+                    'contactInterval' => 1,
+                    'inventoryInterval' => 2,
+                ],
+                'Download' => [
                     'packageDeployment' => $expectedPackageDeployment,
-                    'downloadPeriodDelay' => 4,
-                    'downloadCycleDelay' => 5,
-                    'downloadFragmentDelay' => 6,
-                    'downloadMaxPriority' => 7,
-                    'downloadTimeout' => 8,
-                ),
-                'Scan' => array(
+                    'downloadPeriodDelay' => 3,
+                    'downloadCycleDelay' => 4,
+                    'downloadFragmentDelay' => 5,
+                    'downloadMaxPriority' => 6,
+                    'downloadTimeout' => 7,
+                ],
+                'Scan' => [
                     'allowScan' => $expectedAllowScan,
                     'scanSnmp' => $expectedScanSnmp,
-                ),
-            ),
+                ],
+            ],
             $model->getAllConfig()
         );
+    }
+
+    public function testGetAllConfigNonCompactWithNullValues()
+    {
+        $model = Mockery::mock(ClientOrGroup::class)->makePartial();
+        $model->shouldReceive('getConfig')->atLeast()->times(1)->andReturnNull();
+
+        $this->assertSame(
+            [
+                'Agent' => [
+                    'contactInterval' => null,
+                    'inventoryInterval' => null,
+                ],
+                'Download' => [
+                    'packageDeployment' => 1,
+                    'downloadPeriodDelay' => null,
+                    'downloadCycleDelay' => null,
+                    'downloadFragmentDelay' => null,
+                    'downloadMaxPriority' => null,
+                    'downloadTimeout' => null,
+                ],
+                'Scan' => [
+                    'allowScan' => 1,
+                    'scanSnmp' => 1,
+                ],
+            ],
+            $model->getAllConfig()
+        );
+    }
+
+    public function testGetExplicitConfigWithNonNullValues()
+    {
+        $model = Mockery::mock(ClientOrGroup::class)->makePartial();
+        $model->shouldReceive('getConfig')->with('contactInterval')->andReturn(0);
+        $model->shouldReceive('getConfig')->with('inventoryInterval')->andReturn(1);
+        $model->shouldReceive('getConfig')->with('downloadPeriodDelay')->andReturn(2);
+        $model->shouldReceive('getConfig')->with('downloadCycleDelay')->andReturn(3);
+        $model->shouldReceive('getConfig')->with('downloadFragmentDelay')->andReturn(4);
+        $model->shouldReceive('getConfig')->with('downloadMaxPriority')->andReturn(5);
+        $model->shouldReceive('getConfig')->with('downloadTimeout')->andReturn(6);
+        // The following options can only be 0 or NULL
+        $model->shouldReceive('getConfig')->with('packageDeployment')->andReturn(0);
+        $model->shouldReceive('getConfig')->with('allowScan')->andReturn(0);
+        $model->shouldReceive('getConfig')->with('scanSnmp')->andReturn(0);
+
+        $this->assertSame(
+            [
+                'contactInterval' => 0,
+                'inventoryInterval' => 1,
+                'packageDeployment' => 0,
+                'downloadPeriodDelay' => 2,
+                'downloadCycleDelay' => 3,
+                'downloadFragmentDelay' => 4,
+                'downloadMaxPriority' => 5,
+                'downloadTimeout' => 6,
+                'allowScan' => 0,
+                'scanSnmp' => 0,
+            ],
+            $model->getExplicitConfig()
+        );
+    }
+
+    public function testGetExplicitConfigWithNullValues()
+    {
+        $model = Mockery::mock(ClientOrGroup::class)->makePartial();
+        $model->shouldReceive('getConfig')->atLeast()->times(1)->andReturnNull();
+
+        $this->assertSame([], $model->getExplicitConfig());
     }
 }

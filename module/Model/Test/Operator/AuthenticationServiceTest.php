@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for AuthenticationService
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,73 +22,91 @@
 
 namespace Model\Test\Operator;
 
+use Model\Operator\AuthenticationService;
+
 /**
  * Tests for AuthenticationService
  */
-class AuthenticationServiceTest extends \PHPUnit_Framework_TestCase
+class AuthenticationServiceTest extends \Model\Test\AbstractTest
 {
-    /**
-     * An AuthenticationService instance pulled in by setUp()
-     *
-     * @var \Model\Operator\AuthenticationService
-     */
-    protected $_auth;
+    /** {@inheritdoc} */
+    protected static $_tables = array('Operators');
 
-    /**
-     * @ignore
-     */
-    protected function setUp()
+    public function getDataSet()
     {
-        // Create table and default account
-        \Library\Application::getService('Database\Table\Operators')->setSchema();
-
-        $this->_auth = \Library\Application::getService('Zend\Authentication\AuthenticationService');
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
-    /**
-     * Test service retrieval
-     */
     public function testService()
     {
-        $this->assertInstanceOf(
-            'Model\Operator\AuthenticationService',
-            \Library\Application::getService('Zend\Authentication\AuthenticationService')
-        );
+        $service = static::$serviceManager->build('Laminas\Authentication\AuthenticationService');
+        $this->assertInstanceOf('Model\Operator\AuthenticationService', $service);
+        $this->assertInstanceOf('Model\Operator\AuthenticationAdapter', $service->getAdapter());
     }
 
-    /**
-     * Test login() method with valid and invalid credentials
-     */
     public function testLogin()
     {
-        $this->assertFalse($this->_auth->login('', 'admin')); // Should not throw exception
-        $this->assertFalse($this->_auth->login('baduser', 'admin'));
-        $this->assertFalse($this->_auth->login('admin', 'badpassword'));
+        $result = $this->createMock('Laminas\Authentication\Result');
+        $result->method('isValid')->willReturn('is_valid');
 
-        $this->assertTrue($this->_auth->login('admin', 'admin'));
-        $this->assertEquals('admin', $this->_auth->getIdentity());
+        $adapter = $this->createMock('Model\Operator\AuthenticationAdapter');
+        $adapter->method('setIdentity')->with('user')->willReturnSelf();
+        $adapter->method('setCredential')->with('password')->willReturnSelf();
+        $adapter->method('authenticate')->willReturn($result);
 
-        // clean up
-        $this->_auth->clearIdentity();
+        $service = $this->createPartialMock(AuthenticationService::class, ['getAdapter', 'authenticate']);
+        $service->method('getAdapter')->willReturn($adapter);
+        $service->method('authenticate')->with(null)->willReturnCallback(
+            function () use ($adapter) {
+                return $adapter->authenticate();
+            }
+        );
+
+        $this->assertEquals('is_valid', $service->login('user', 'password'));
+    }
+
+    public function testLoginEmptyUser()
+    {
+        $service = $this->createPartialMock(AuthenticationService::class, ['getAdapter', 'authenticate']);
+        $service->expects($this->never())->method('getAdapter');
+        $service->expects($this->never())->method('authenticate');
+
+        $this->assertFalse($service->login('', 'password'));
     }
 
     public function testChangeIdentityValid()
     {
-        // Get valid identity first
-        $this->_auth->login('admin', 'admin');
-        $this->_auth->changeIdentity('test');
-        $this->assertEquals('test', $this->_auth->getIdentity());
+        $storage = $this->createMock('Laminas\Authentication\Storage\StorageInterface');
+        $storage->expects($this->once())->method('write')->with('user');
+
+        $service = $this->createPartialMock(AuthenticationService::class, ['getStorage', 'hasIdentity']);
+        $service->method('getStorage')->willReturn($storage);
+        $service->expects($this->once())->method('hasIdentity')->willReturn(true);
+
+        $service->changeIdentity('user');
     }
 
     public function testChangeIdentityUnauthenticated()
     {
-        $this->setExpectedException('LogicException');
-        $this->_auth->changeIdentity('test');
+        $this->expectException('LogicException');
+        $this->expectExceptionMessage('Cannot change identity: not authenticated yet');
+
+        $service = $this->createPartialMock(AuthenticationService::class, ['getStorage', 'hasIdentity']);
+        $service->expects($this->never())->method('getStorage');
+        $service->expects($this->once())->method('hasIdentity')->willReturn(false);
+
+        $service->changeIdentity('user');
     }
 
     public function testChangeIdentityNoIdentity()
     {
-        $this->setExpectedException('InvalidArgumentException', 'No identity provided');
-        $this->_auth->changeIdentity('');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('No identity provided');
+
+        $service = $this->createPartialMock(AuthenticationService::class, ['getStorage', 'hasIdentity']);
+        $service->expects($this->never())->method('getStorage');
+        $service->method('hasIdentity')->willReturn(true);
+
+        $service->changeIdentity('');
     }
 }

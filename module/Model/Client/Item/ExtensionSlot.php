@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Extension slot (PCI, PCIe, AGP, ISA, PCMCIA and similar)
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -29,6 +30,6 @@ namespace Model\Client\Item;
  * @property string $Status
  * @property string $SlotId Slot ID (UNIX only)
  */
-class ExtensionSlot extends \ArrayObject
+class ExtensionSlot extends \Model\AbstractModel
 {
 }

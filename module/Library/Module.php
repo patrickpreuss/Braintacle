@@ -1,8 +1,9 @@
 <?php
+
 /**
  * The Library module
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,153 +22,141 @@
 
 namespace Library;
 
-use Zend\ModuleManager\Feature;
+use Laminas\Di\ConfigInterface;
+use Laminas\Di\Container\ConfigFactory;
+use Laminas\Di\Container\InjectorFactory;
+use Laminas\Di\InjectorInterface;
+use Laminas\ModuleManager\Feature;
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Laminas\ServiceManager\ServiceManager;
+use Library\Mvc\Controller\Plugin\RedirectToRoute;
+use Library\Mvc\Controller\Plugin\UrlFromRoute;
+use Library\Mvc\Service\RedirectToRouteFactory;
+use Library\Mvc\Service\UrlFromRouteFactory;
 
 /**
  * The Library module
- * 
+ *
  * This module provides a library of general purpose classes (not specific to
  * other modules). Provided view helpers etc. are automatically registered and
  * don't need to be loaded explicitly.
  *
  * @codeCoverageIgnore
  */
-class Module implements
-Feature\AutoloaderProviderInterface,
-Feature\ConfigProviderInterface
+class Module implements Feature\ConfigProviderInterface
 {
-    /**
-     * @internal
-     */
+    /** {@inheritdoc} */
     public function getConfig()
     {
-        $config = array(
+        return array(
             'controller_plugins' => array(
-                'invokables' => array(
-                    '_' => 'Library\Mvc\Controller\Plugin\TranslationHelper',
+                'aliases' => array(
                     'RedirectToRoute' => 'Library\Mvc\Controller\Plugin\RedirectToRoute',
+                    'redirectToRoute' => 'Library\Mvc\Controller\Plugin\RedirectToRoute',
                     'UrlFromRoute' => 'Library\Mvc\Controller\Plugin\UrlFromRoute',
+                    'urlFromRoute' => 'Library\Mvc\Controller\Plugin\UrlFromRoute',
+                ),
+                'factories' => array(
+                    RedirectToRoute::class => RedirectToRouteFactory::class,
+                    UrlFromRoute::class => UrlFromRouteFactory::class,
                 )
             ),
+            'filters' => array(
+                'aliases' => array(
+                    'Library\FixEncodingErrors' => 'Library\Filter\FixEncodingErrors',
+                    'Library\LogLevel' => 'Library\Filter\LogLevel',
+                ),
+            ),
+            'log' => array(
+                'Library\Logger' => array(
+                    // Ready-to-use logger instance with a noop writer attached.
+                    // Applications can add their own writer.
+                    'writers' => array(
+                        array(
+                            'name' => 'noop',
+                        ),
+                    ),
+                ),
+            ),
             'service_manager' => array(
-                'factories' => array(
-                    '\Library\Logger' => 'Library\Log\LoggerServiceFactory',
+                'delegators' => array(
+                    'Laminas\Mvc\I18n\Translator' => array('Library\I18n\Translator\DelegatorFactory'),
                 ),
-                'invokables' => array(
-                    'Library\ArchiveManager' => 'Library\ArchiveManager',
-                    'Library\Now' => 'DateTime',
-                    'Library\Random' => 'Library\Random',
-                ),
-                'shared' => array(
+                'aliases' => [
+                    ServiceLocatorInterface::class => ServiceManager::class,
+                ],
+                'factories' => [
+                    ConfigInterface::class => ConfigFactory::class,
+                    InjectorInterface::class => InjectorFactory::class,
+                    'Library\HttpClient' => function () {
+                        return new \Laminas\Http\Client();
+                    },
+                    'Library\Log\Writer\StdErr' => function () {
+                        return new \Laminas\Log\Writer\Stream('php://stderr');
+                    },
+                    'Library\Now' => function () {
+                        return new \DateTime();
+                    },
+                    'Library\UserConfig' => 'Library\Service\UserConfigFactory',
+                ],
+                'shared' => [
+                    'Library\HttpClient' => false,
                     'Library\Now' => false,
+                ],
+            ),
+            'translator' => array(
+                'translation_file_patterns' => array(
+                    array(
+                        'type' => 'Po',
+                        'base_dir' => __DIR__ . '/data/i18n',
+                        'pattern' => '%s.po',
+                    ),
                 ),
             ),
             'translator_plugins' => array(
-                'invokables' => array(
+                'aliases' => array(
                     'Po' => 'Library\I18n\Translator\Loader\Po',
-                )
+                ),
+            ),
+            'validators' => array(
+                'aliases' => array(
+                    'Library\DirectoryWritable' => 'Library\Validator\DirectoryWritable',
+                    'Library\FileReadable' => 'Library\Validator\FileReadable',
+                    'Library\IpNetworkAddress' => Validator\IpNetworkAddress::class,
+                    'Library\LogLevel' => 'Library\Validator\LogLevel',
+                    'Library\NotInArray' => 'Library\Validator\NotInArray',
+                    'Library\ProductKey' => 'Library\Validator\ProductKey',
+                ),
             ),
             'view_helpers' => array(
-                'factories' => array(
-                    'formYesNo' => 'Library\View\Helper\Service\FormYesNoFactory',
-                    'htmlTag' => 'Library\View\Helper\Service\HtmlTagFactory',
-                ),
-                'invokables' => array(
+                'aliases' => array(
                     'formSelectSimple' => 'Library\View\Helper\FormSelectSimple',
                     'formSelectUntranslated' => 'Library\View\Helper\FormSelectUntranslated',
+                    'formYesNo' => 'Library\View\Helper\FormYesNo',
+                    'htmlElement' => 'Library\View\Helper\HtmlElement',
                 ),
-            ),
-        );
-        $config += Application::getTranslationConfig(static::getPath('data/i18n'));
-
-        if (\Locale::getPrimaryLanguage(\Locale::getDefault()) != 'en') {
-            $zfTranslations = @$appConfig = Application::getConfig()['paths']['Zend translations'];
-            if (is_dir($zfTranslations)) {
-                $locale = \Locale::getDefault();
-                $translationFile = "$zfTranslations/$locale/Zend_Validate.php";
-                if (!is_file($translationFile)) {
-                    $locale = \Locale::getPrimaryLanguage($locale);
-                    $translationFile = "$zfTranslations/$locale/Zend_Validate.php";
-                    if (!is_file($translationFile)) {
-                        $translationFile = null;
-                    }
-                }
-                if ($translationFile) {
-                    $config['translator']['translation_files'][] = array(
-                        'type' => 'phparray',
-                        'filename' => $translationFile,
-                        'text_domain' => 'Zend',
-                    );
-                }
-            }
-        }
-
-        return $config;
-    }
-
-    /**
-     * @internal
-     */
-    public function getAutoloaderConfig()
-    {
-        return array(
-            'Zend\Loader\StandardAutoloader' => array(
-                'namespaces' => array(
-                    __NAMESPACE__ => __DIR__,
+                'factories' => array(
+                    'Library\View\Helper\FormSelectSimple' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+                    'Library\View\Helper\FormSelectUntranslated' => 'Laminas\ServiceManager\Factory\InvokableFactory',
+                    'Library\View\Helper\FormYesNo' => 'Library\View\Helper\Service\FormYesNoFactory',
+                    'Library\View\Helper\HtmlElement' => 'Laminas\ServiceManager\Factory\InvokableFactory',
                 ),
             ),
         );
     }
 
-    /**
-     * @internal
-     */
-    public function onBootstrap(\Zend\EventManager\EventInterface $e)
+    /** {@inheritdoc} */
+    public function onBootstrap(\Laminas\EventManager\EventInterface $e)
     {
-        \Zend\Filter\StaticFilter::getPluginManager()->setInvokableClass(
-            'Library\FixEncodingErrors',
-            'Library\Filter\FixEncodingErrors'
-        );
         $serviceManager = $e->getApplication()->getServiceManager();
 
         // Register form element view helpers
         $formElementHelper = $serviceManager->get('ViewHelperManager')->get('formElement');
-        $formElementHelper->addClass('Library\Form\Element\SelectSimple', 'formselectsimple');
-        $formElementHelper->addType('select_untranslated', 'formselectuntranslated');
+        $formElementHelper->addClass('Library\Form\Element\SelectSimple', 'formSelectSimple');
+        $formElementHelper->addType('select_untranslated', 'formSelectUntranslated');
 
-        if (\Locale::getPrimaryLanguage(\Locale::getDefault()) != 'en') {
-            $mvcTranslator = $serviceManager->get('MvcTranslator');
-            if (Application::isDevelopment()) {
-                $translator = $mvcTranslator->getTranslator();
-                $translator->enableEventManager();
-                $translator->getEventManager()->attach(
-                    \Zend\I18n\Translator\Translator::EVENT_MISSING_TRANSLATION,
-                    array($this, 'onMissingTranslation')
-                );
-            }
-            // Validators have no translator by default. Attach translator, but
-            // use a different text domain to avoid warnings if the Zend
-            // translations are not loaded. For custom messages, the text domain
-            // must be reset manually to 'default' for individual validators.
-            \Zend\Validator\AbstractValidator::setDefaultTranslator($mvcTranslator);
-            \Zend\Validator\AbstractValidator::setDefaultTranslatorTextDomain('Zend');
-        }
-    }
-
-    /**
-     * Event handler for missing translations
-     * @param \Zend\EventManager\EventInterface $e
-     * @internal
-     */
-    public function onMissingTranslation(\Zend\EventManager\EventInterface $e)
-    {
-        // Issue warning about missing translation for the 'default' text
-        // domain. This warning will indicate either a message string missing in
-        // the translation file, or accidental translator invokation when a
-        // string should not actually be translated.
-        if ($e->getParam('text_domain') == 'default') {
-            trigger_error('Missing translation: ' . $e->getParam('message'), E_USER_NOTICE);
-        }
+        \Laminas\Filter\StaticFilter::setPluginManager($serviceManager->get('FilterManager'));
+        \Laminas\Validator\StaticValidator::setPluginManager($serviceManager->get('ValidatorManager'));
     }
 
     /**
@@ -176,7 +165,7 @@ Feature\ConfigProviderInterface
      * @param string $path Optional path component that is appended to the module root path
      * @return string Absolute path to requested file/directory (directories without trailing slash)
      */
-    static function getPath($path='')
+    public static function getPath($path = '')
     {
         return \Library\Application::getPath('module/Library/' . $path);
     }

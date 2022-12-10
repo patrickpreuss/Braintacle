@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "network_devices" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "network_devices" table
@@ -30,7 +31,7 @@ class NetworkDevicesIdentified extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'network_devices';
         parent::__construct($serviceLocator);
@@ -40,9 +41,24 @@ class NetworkDevicesIdentified extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _preSetSchema($logger, $schema, $database)
+    protected function preSetSchema($logger, $schema, $database, $prune)
     {
         // Drop obsolete autoincrement column to avoid MySQL error when setting new PK
-        $this->_dropColumnIfExists($logger, $database, 'id');
+        $this->dropColumnIfExists($logger, $database, 'id');
+
+        // There used to be a column named "user". On PostgreSQL, dropping that
+        // column would fail without quoting. Since the default pruning code
+        // does not quote, delete the column manually with quoting temporarily
+        // enabled.
+        if ($prune and $database->isPgsql()) {
+            $keywords = $database->quoteKeywords;
+            $database->quoteKeywords[] = 'user';
+            try {
+                $this->dropColumnIfExists($logger, $database, 'user');
+            } finally {
+                // Always reset quoteKeywords.
+                $database->quoteKeywords = $keywords;
+            }
+        }
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "accountinfo_config" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
+
+use Nada\Column\AbstractColumn as Column;
 
 /**
  * "accountinfo_config" table
@@ -45,7 +48,7 @@ class CustomFieldConfig extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'accountinfo_config';
         parent::__construct($serviceLocator);
@@ -55,16 +58,11 @@ class CustomFieldConfig extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    protected function _postSetSchema($logger, $schema, $database)
+    protected function postSetSchema($logger, $schema, $database, $prune)
     {
         // If table is empty, create default entries
         $logger->debug('Checking for existing custom field config.');
-        if (
-            $this->adapter->query(
-                'SELECT COUNT(id) AS num FROM accountinfo_config',
-                \Zend\Db\Adapter\Adapter::QUERY_MODE_EXECUTE
-            )->current()->offsetGet('num') === '0'
-        ) {
+        if ($this->select()->count() == 0) {
             $this->insert(
                 array(
                     'name' => 'TAG',
@@ -113,13 +111,13 @@ class CustomFieldConfig extends \Database\AbstractTable
                     case self::INTERNALTYPE_TEXT:
                         // Can be text, integer or float. Evaluate column datatype.
                         switch ($column->getDatatype()) {
-                            case \Nada::DATATYPE_VARCHAR:
+                            case Column::TYPE_VARCHAR:
                                 $type = 'text';
                                 break;
-                            case \Nada::DATATYPE_INTEGER:
+                            case Column::TYPE_INTEGER:
                                 $type = 'integer';
                                 break;
-                            case \Nada::DATATYPE_FLOAT:
+                            case Column::TYPE_FLOAT:
                                 $type = 'float';
                                 break;
                         }
@@ -132,7 +130,7 @@ class CustomFieldConfig extends \Database\AbstractTable
                         // and stores values in a non-ISO format. Silently
                         // ignore these fields. Only accept real date
                         // columns.
-                        if ($column->getDatatype() == \Nada::DATATYPE_DATE) {
+                        if ($column->getDatatype() == Column::TYPE_DATE) {
                             $type = 'date';
                         }
                         break;
@@ -161,24 +159,24 @@ class CustomFieldConfig extends \Database\AbstractTable
         $length = null;
         switch ($type) {
             case 'text':
-                $datatype = \Nada::DATATYPE_VARCHAR;
+                $datatype = Column::TYPE_VARCHAR;
                 $length = 255;
                 $internalType = self::INTERNALTYPE_TEXT;
                 break;
             case 'integer':
-                $datatype = \Nada::DATATYPE_INTEGER;
+                $datatype = Column::TYPE_INTEGER;
                 $internalType = self::INTERNALTYPE_TEXT;
                 break;
             case 'float':
-                $datatype = \Nada::DATATYPE_FLOAT;
+                $datatype = Column::TYPE_FLOAT;
                 $internalType = self::INTERNALTYPE_TEXT;
                 break;
             case 'date':
-                $datatype = \Nada::DATATYPE_DATE;
+                $datatype = Column::TYPE_DATE;
                 $internalType = self::INTERNALTYPE_DATE;
                 break;
             case 'clob':
-                $datatype = \Nada::DATATYPE_CLOB;
+                $datatype = Column::TYPE_CLOB;
                 $internalType = self::INTERNALTYPE_TEXTAREA;
                 break;
             default:
@@ -190,26 +188,31 @@ class CustomFieldConfig extends \Database\AbstractTable
 
         $connection->beginTransaction();
 
-        $select = $this->getSql()->select();
-        $select->columns(array('show_order' => new \Zend\Db\Sql\Literal('MAX(show_order) + 1')))
-               ->where(array('account_type' => 'COMPUTERS'));
-        $order = $this->selectWith($select)->current()['show_order'];
+        try {
+            $select = $this->getSql()->select();
+            $select->columns(array('show_order' => new \Laminas\Db\Sql\Literal('MAX(show_order) + 1')))
+                ->where(array('account_type' => 'COMPUTERS'));
+            $order = $this->selectWith($select)->current()['show_order'];
 
-        $this->insert(
-            array(
-                'type' => $internalType,
-                'name' => $name,
-                'show_order' => $order,
-                'account_type' => 'COMPUTERS'
-            )
-        );
-        $select = $this->getSql()->select();
-        $select->columns(array('id'))->where(array('account_type' => 'COMPUTERS', 'name' => $name));
-        $id = $this->selectWith($select)->current()['id'];
+            $this->insert(
+                array(
+                    'type' => $internalType,
+                    'name' => $name,
+                    'show_order' => $order,
+                    'account_type' => 'COMPUTERS'
+                )
+            );
+            $select = $this->getSql()->select();
+            $select->columns(array('id'))->where(array('account_type' => 'COMPUTERS', 'name' => $name));
+            $id = $this->selectWith($select)->current()['id'];
 
-        $nada->getTable('accountinfo')->addColumn("fields_$id", $datatype, $length);
+            $nada->getTable('accountinfo')->addColumn("fields_$id", $datatype, $length);
 
-        $connection->commit();
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
     }
 
     /**
@@ -241,13 +244,18 @@ class CustomFieldConfig extends \Database\AbstractTable
         $connection = $this->adapter->getDriver()->getConnection();
         $connection->beginTransaction();
 
-        $select = $this->getSql()->select();
-        $select->columns(array('id'))->where(array('name' => $name, 'account_type' => 'COMPUTERS'));
-        $id = $this->selectWith($select)->current()['id'];
+        try {
+            $select = $this->getSql()->select();
+            $select->columns(array('id'))->where(array('name' => $name, 'account_type' => 'COMPUTERS'));
+            $id = $this->selectWith($select)->current()['id'];
 
-        $this->delete(array('id' => $id));
-        $this->_serviceLocator->get('Database\Nada')->getTable('accountinfo')->dropColumn('fields_' . $id);
+            $this->delete(array('id' => $id));
+            $this->_serviceLocator->get('Database\Nada')->getTable('accountinfo')->dropColumn('fields_' . $id);
 
-        $connection->commit();
+            $connection->commit();
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
     }
 }

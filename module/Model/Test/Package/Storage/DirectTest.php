@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Model\Package\Storage\Direct
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,28 +21,33 @@
  */
 
 namespace Model\Test\Package\Storage;
+
+use Mockery;
+use Model\Config;
 use Model\Package\Storage\Direct;
 use Model\Package\Metadata;
 use org\bovigo\vfs\vfsStream;
+use PHPUnit\Framework\MockObject\MockObject;
+use RuntimeException;
 
 /**
  * Tests for Model\Package\Storage\Direct
  */
 class DirectTest extends \Model\Test\AbstractTest
 {
+    use \Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+
     /** {@inheritdoc} */
     public function getDataSet()
     {
-        return new \PHPUnit_Extensions_Database_DataSet_DefaultDataSet;
+        return new \PHPUnit\DbUnit\DataSet\DefaultDataSet();
     }
 
     public function testPrepare()
     {
         $data = array('Id' => 'id');
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('createDirectory'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['createDirectory']);
         $model->expects($this->once())->method('createDirectory')->with('id')->willReturn('path');
         $this->assertEquals('path', $model->prepare($data));
     }
@@ -53,10 +59,8 @@ class DirectTest extends \Model\Test\AbstractTest
         $deleteSource = 'deleteSource';
         $numFragments = 'numFragments';
         $data2 = array('foo' => 'bar', 'NumFragments' => $numFragments);
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('writeContent', 'writeMetadata', 'cleanup'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['writeContent', 'writeMetadata', 'cleanup']);
         $model->expects($this->once())
               ->method('writeContent')
               ->with($data, $file, $deleteSource)
@@ -76,10 +80,8 @@ class DirectTest extends \Model\Test\AbstractTest
         $deleteSource = 'deleteSource';
         $numFragments = 'numFragments';
         $data2 = $data + array('NumFragments' => $numFragments);
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('writeContent', 'writeMetadata', 'cleanup'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['writeContent', 'writeMetadata', 'cleanup']);
         $model->expects($this->once())
               ->method('writeContent')
               ->with($data, $file, $deleteSource)
@@ -91,7 +93,8 @@ class DirectTest extends \Model\Test\AbstractTest
         $model->expects($this->once())
               ->method('cleanup')
               ->with('id');
-        $this->setExpectedException('RuntimeException', 'test');
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test');
         $model->write($data, $file, $deleteSource);
     }
 
@@ -100,10 +103,8 @@ class DirectTest extends \Model\Test\AbstractTest
         $data = array('Id' => 'id');
         $file = 'file';
         $deleteSource = 'deleteSource';
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('writeContent', 'writeMetadata', 'cleanup'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['writeContent', 'writeMetadata', 'cleanup']);
         $model->expects($this->once())
               ->method('writeContent')
               ->with($data, $file, $deleteSource)
@@ -113,7 +114,8 @@ class DirectTest extends \Model\Test\AbstractTest
         $model->expects($this->once())
               ->method('cleanup')
               ->with('id');
-        $this->setExpectedException('RuntimeException', 'test');
+        $this->expectException('RuntimeException');
+        $this->expectExceptionMessage('test');
         $model->write($data, $file, $deleteSource);
     }
 
@@ -121,10 +123,8 @@ class DirectTest extends \Model\Test\AbstractTest
     {
         $root = vfsStream::setup('root');
         $path = $root->url() . '/path';
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
         $model->expects($this->once())->method('getPath')->with('id')->willReturn($path);
         $model->cleanup('id');
     }
@@ -135,87 +135,112 @@ class DirectTest extends \Model\Test\AbstractTest
         $dir = vfsStream::newDirectory('path')->at($root);
         $path = $dir->url();
         vfsStream::newFile('test')->at($dir);
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
         $model->method('getPath')->with('id')->willReturn($path);
         $model->cleanup('id');
-        $this->assertFileNotExists($path);
+        $this->assertFileDoesNotExist($path);
     }
 
-    public function testCleanupError()
-    {
-        $root = vfsStream::setup('root');
-        $dir = vfsStream::newDirectory('path')->at($root);
-        $path = $dir->url();
-        $dirInvalid = vfsStream::newDirectory('test_dir')->at($dir)->url();
-        $fileValid = vfsStream::newFile('test_file')->at($dir)->url();
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
-        $model->method('getPath')->with('id')->willReturn($path);
-        try {
-            $model->cleanup('id');
-            $this->fail('Expected exception was not thrown');
-        } catch (\Exception $e) {
-            $this->assertFileExists($dirInvalid);
-            $this->assertFileNotExists($fileValid);
-        }
-    }
-
-    public function testCreateDirectory()
+    public function testCreateDirectorySuccess()
     {
         $root = vfsStream::setup('root');
         $path = $root->url() . '/path';
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->disableOriginalConstructor()
-                      ->getMock();
+
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
         $model->method('getPath')->with('id')->willReturn($path);
         $this->assertEquals($path, $model->createDirectory('id'));
         $this->assertTrue(is_dir($path));
     }
 
+    public function testCreateDirectoryFailDirectoryExists()
+    {
+        $root = vfsStream::setup('root');
+        $path = $root->url() . '/path';
+        vfsStream::newDirectory('path')->at($root);
+
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
+        $model->method('getPath')->with('id')->willReturn($path);
+
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage('Package directory already exists: ' . $path);
+
+        $model->createDirectory('id');
+    }
+
+    public function testCreateDirectoryFailDirectoryNotWritable()
+    {
+        $root = vfsStream::setup('root', 0000);
+        $path = $root->url() . '/path';
+
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
+        $model->method('getPath')->with('id')->willReturn($path);
+
+        $this->expectException('Model\Package\RuntimeException');
+        $this->expectExceptionMessage('Could not create package directory: ' . $path);
+
+        $model->createDirectory('id');
+        $this->assertFalse(is_dir($path));
+    }
+
     public function testGetPath()
     {
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
+        /** @var MockObject|Config */
+        $config = $this->createMock(Config::class);
         $config->method('__get')->with('packagePath')->willReturn('packagePath');
-        $model = new Direct($config, new Metadata);
+        $model = new Direct($config, new Metadata());
         $this->assertEquals('packagePath/id', $model->getPath('id'));
     }
 
-    public function testWriteMetadata()
+    public function testWriteMetadataNoValidate()
     {
         $data = array('Id' => 'id');
 
-        $metadata = $this->getMock('Model\Package\Metadata');
+        $metadata = $this->createMock('Model\Package\Metadata');
         $metadata->expects($this->once())->method('setPackageData')->with($data);
-        $metadata->expects($this->once())->method('save')->with('/path/info');
+        $metadata->expects($this->once())->method('write')->with('/path/info');
+        $metadata->expects($this->never())->method('forceValid');
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->setConstructorArgs(array($config, $metadata))
-                      ->getMock();
-        $model->method('getPath')->with('id')->willReturn('/path');
+        $config = $this->createMock('Model\Config');
 
+        $model = Mockery::mock(Direct::class, [$config, $metadata])->makePartial();
+        $model->shouldReceive('getPath')->with('id')->andReturn('/path');
+
+        $model->writeMetadata($data);
+    }
+
+    public function testWriteMetadataValidate()
+    {
+        $data = array('Id' => 'id');
+
+        $exception = new RuntimeException();
+
+        /** @var MockObject|Metadata */
+        $metadata = $this->createMock(Metadata::class);
+        $metadata->expects($this->once())->method('setPackageData')->with($data);
+        $metadata->expects($this->once())->method('forceValid')->willThrowException($exception);
+        $metadata->expects($this->never())->method('write');
+
+        /** @var MockObject|Config */
+        $config = $this->createMock(Config::class);
+        $config->expects($this->once())->method('__get')->with('validateXml')->willReturn(true);
+
+        $model = new Direct($config, $metadata);
+
+        $this->expectExceptionObject($exception);
         $model->writeMetadata($data);
     }
 
     public function testReadMetadata()
     {
-        $metadata = $this->getMock('Model\Package\Metadata');
+        $metadata = $this->createMock('Model\Package\Metadata');
         $metadata->expects($this->once())->method('load')->with('/path/info');
         $metadata->expects($this->once())->method('getPackageData')->willReturn('packageData');
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->setConstructorArgs(array($config, $metadata))
-                      ->getMock();
-        $model->method('getPath')->with('id')->willReturn('/path');
+        $config = $this->createMock('Model\Config');
+
+        $model = Mockery::mock(Direct::class, [$config, $metadata])->makePartial();
+        $model->shouldReceive('getPath')->with('id')->andReturn('/path');
 
         $this->assertEquals('packageData', $model->readMetadata('id'));
     }
@@ -226,26 +251,31 @@ class DirectTest extends \Model\Test\AbstractTest
             'Id' => 'id',
             'FileLocation' => '',
         );
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
-        $model = $this->_getModel(array('Model\Config' => $config));
-        $this->assertSame(0, $model->writeContent($data, null, null));
+
+        /** @var MockObject|Config */
+        $config = $this->createMock('Model\Config');
+
+        $model = new Direct($config, static::$serviceManager->get(Metadata::class));
+
+        $this->assertSame(0, $model->writeContent($data, '', false));
     }
 
     public function writeContentProvider()
     {
-        return array(
-            array(0, 10, 1, true), // Empty file, ignore maxFragmentSize
-            array(0, 10, 1, false),
-            array(1025, 0, 1, true), // Split disabled
-            array(1025, 0, 1, false),
-            array(1024, 1, 1, true), // Filesize <= maxFragmentSize (kB)
-            array(1024, 1, 1, false),
-            array(1025, 1, 2, false), // Split
-            array(1025, 1, 2, false),
-            array(2047, 1, 2, false),
-            array(2048, 1, 2, false),
-            array(2049, 1, 3, true),
-        );
+        return [
+            [0, 10, 1, true], // Empty file, ignore maxFragmentSize
+            [0, 10, 1, false],
+            [1025, 0, 1, true], // Split disabled
+            [1025, 0, 1, false],
+            [1025, null, 1, false], // NULL and 0 should be equivalent
+            [1024, 1, 1, true], // Filesize <= maxFragmentSize (kB]
+            [1024, 1, 1, false],
+            [1025, 1, 2, false], // Split
+            [1025, 1, 2, false],
+            [2047, 1, 2, false],
+            [2048, 1, 2, false],
+            [2049, 1, 3, true],
+        ];
     }
 
    /**
@@ -271,19 +301,14 @@ class DirectTest extends \Model\Test\AbstractTest
             'MaxFragmentSize' => $maxFragmentSize,
         );
 
-        $config = $this->getMockBuilder('Model\Config')->disableOriginalConstructor()->getMock();
-        $metadata = $this->getMock('Model\Package\Metadata');
-        $model = $this->getMockBuilder('Model\Package\Storage\Direct')
-                      ->setMethods(array('getPath'))
-                      ->setConstructorArgs(array($config, $metadata))
-                      ->getMock();
+        $model = $this->createPartialMock(Direct::class, ['getPath']);
         $model->method('getPath')->with('id')->willReturn($packageDir);
 
         $numFragments = $model->writeContent($data, $sourceFile, $deleteSource);
         $this->assertSame($expectedFragments, $numFragments);
 
         if ($deleteSource) {
-            $this->assertFileNotExists($sourceFile);
+            $this->assertFileDoesNotExist($sourceFile);
         } else {
             $this->assertFileExists($sourceFile);
         }
@@ -297,7 +322,7 @@ class DirectTest extends \Model\Test\AbstractTest
             }
             $targetContent .= file_get_contents($targetFile);
         }
-        $this->assertFileNotExists("$packageDir/id-" . ($numFragments + 1));
+        $this->assertFileDoesNotExist("$packageDir/id-" . ($numFragments + 1));
         $this->assertEquals($content, $targetContent);
     }
 }

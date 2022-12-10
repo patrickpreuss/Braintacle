@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the FormYesNo helper
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,29 +22,67 @@
 
 namespace Library\Test\View\Helper;
 
-use \Zend\Dom\Document\Query as Query;
+use Laminas\Dom\Document\Query as Query;
+use Laminas\I18n\View\Helper\Translate;
+use Library\View\Helper\HtmlElement;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 /**
  * Tests for the FormYesNo helper
  */
 class FormYesNoTest extends AbstractTest
 {
-    /**
-     * Tests for the __invoke() method
-     */
-    public function testInvoke()
+    public function invokeAttributesProvider()
     {
-        $helper = $this->_getHelper();
-        $result = $helper('TestCaption', array('hiddenName' => 'hiddenValue'));
-        $document = new \Zend\Dom\Document($result);
+        return array(
+            array(array(), array('method' => 'post')),
+            array(array('foo' => 'bar'), array('foo' => 'bar', 'method' => 'post')),
+            array(array('method' => 'get'), array('method' => 'get')),
+            array(array('method' => 'get', 'foo' => 'bar'), array('method' => 'get', 'foo' => 'bar')),
+        );
+    }
+
+    /**
+     * @dataProvider invokeAttributesProvider
+     */
+    public function testInvoke($attributesOrig, $attributesUpdated)
+    {
+        /** @var Stub|Translate */
+        $translate = $this->createMock(Translate::class);
+        $translate->method('__invoke')->willReturnCallback(
+            function ($message) {
+                return "_($message)";
+            }
+        );
+
+        /** @var MockObject|HtmlElement */
+        $htmlElement = $this->createMock(HtmlElement::class);
+        $htmlElement->expects($this->once())
+                    ->method('__invoke')
+                    ->with(
+                        'input',
+                        null,
+                        array(
+                            'type' => 'hidden',
+                            'name' => 'hiddenName',
+                            'value' => 'hiddenValue',
+                        )
+                    )->willReturn('<input type="hidden" name="hiddenName" value="hiddenValue">');
+        $htmlElement->method('htmlAttribs')->with($attributesUpdated)->willReturn(' method="_method"');
+
+        $helper = new \Library\View\Helper\FormYesNo($translate, $htmlElement);
+
+        $result = $helper('TestCaption', array('hiddenName' => 'hiddenValue'), $attributesOrig);
+        $document = new \Laminas\Dom\Document($result);
 
         $this->assertCount(1, Query::execute('//p[text()="TestCaption"]', $document));
-        $this->assertCount(1, Query::execute('//form[@action=""][@method="POST"]', $document));
+        $this->assertCount(1, Query::execute('//form[@method="_method"]', $document));
         $this->assertCount(
             1,
             Query::execute('//input[@type="hidden"][@name="hiddenName"][@value="hiddenValue"]', $document)
         );
-        $this->assertCount(1, Query::execute('//input[@type="submit"][@name="yes"][@value="Ja"]', $document));
-        $this->assertCount(1, Query::execute('//input[@type="submit"][@name="no"][@value="Nein"]', $document));
+        $this->assertCount(1, Query::execute('//input[@type="submit"][@name="yes"][@value="_(Yes)"]', $document));
+        $this->assertCount(1, Query::execute('//input[@type="submit"][@name="no"][@value="_(No)"]', $document));
     }
 }

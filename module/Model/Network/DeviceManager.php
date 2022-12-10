@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Network device manager
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -20,6 +21,8 @@
  */
 
 namespace Model\Network;
+
+use Laminas\Db\Sql\Predicate\Expression;
 
 /**
  * Network device manager
@@ -55,8 +58,7 @@ class DeviceManager
         \Database\Table\NetworkDeviceTypes $networkDeviceTypes,
         \Database\Table\NetworkDevicesScanned $networkDevicesScanned,
         \Database\Table\NetworkDevicesIdentified $networkDevicesIdentified
-    )
-    {
+    ) {
         $this->_networkDeviceTypes = $networkDeviceTypes;
         $this->_networkDevicesScanned = $networkDevicesScanned;
         $this->_networkDevicesIdentified = $networkDevicesIdentified;
@@ -78,9 +80,9 @@ class DeviceManager
      * @param array $filters Filters to apply
      * @param string $order Property to sort by. Default: null
      * @param string $direction One of [asc|desc].
-     * @return \Zend\Db\ResultSet\AbstractResultSet Result set producing \Model\Network\Device
+     * @return \Laminas\Db\ResultSet\AbstractResultSet Result set producing \Model\Network\Device
      */
-    public function getDevices($filters, $order=null, $direction='asc')
+    public function getDevices($filters, $order = null, $direction = 'asc')
     {
         $select = $this->_networkDevicesScanned->getSql()->select();
         $select->columns(array('ip', 'mac', 'name', 'date'))
@@ -149,7 +151,7 @@ class DeviceManager
                    'network_devices',
                    'macaddr = mac',
                    array('description', 'type'),
-                   \Zend\Db\Sql\Select::JOIN_LEFT
+                   \Laminas\Db\Sql\Select::JOIN_LEFT
                )
                ->where(array('mac' => $macAddress));
         $device = $this->_networkDevicesScanned->selectWith($select)->current();
@@ -217,18 +219,18 @@ class DeviceManager
     public function getTypeCounts()
     {
         // The JOIN condition excludes stale entries where the interface has
-        // become part of an inventoried computer.
+        // become part of an inventoried client.
         $select = $this->_networkDeviceTypes->getSql()->select();
         $select->columns(
             array(
                 'name',
-                'num_devices' => new \Zend\Db\Sql\Literal('COUNT(type)')
+                'num_devices' => new \Laminas\Db\Sql\Literal('COUNT(type)')
             )
         )->join(
             'network_devices',
-            new \Zend\Db\Sql\Literal('type = name AND macaddr NOT IN(SELECT macaddr FROM networks)'),
+            new Expression('type = name AND macaddr NOT IN(SELECT macaddr FROM networks)'),
             array(),
-            \Zend\Db\Sql\Select::JOIN_LEFT
+            \Laminas\Db\Sql\Select::JOIN_LEFT
         )
         ->group('name')
         ->order('name');
@@ -268,12 +270,16 @@ class DeviceManager
         }
         $connection = $this->_networkDeviceTypes->getAdapter()->getDriver()->getConnection();
         $connection->beginTransaction();
-        if ($this->_networkDeviceTypes->update(array('name' => $new), array('name' => $old)) != 1) {
+        try {
+            if ($this->_networkDeviceTypes->update(array('name' => $new), array('name' => $old)) != 1) {
+                throw new \RuntimeException('Network device type does not exist: ' . $old);
+            }
+            $this->_networkDevicesIdentified->update(array('type' => $new), array('type' => $old));
+            $connection->commit();
+        } catch (\Exception $e) {
             $connection->rollback();
-            throw new \RuntimeException('Network device type does not exist: ' . $old);
+            throw $e;
         }
-        $this->_networkDevicesIdentified->update(array('type' => $new), array('type' => $old));
-        $connection->commit();
     }
 
     /**
@@ -286,22 +292,24 @@ class DeviceManager
     {
         $connection = $this->_networkDeviceTypes->getAdapter()->getDriver()->getConnection();
         $connection->beginTransaction();
+        try {
+            $this->_networkDevicesIdentified->delete(
+                array(
+                    'type' => $description,
+                    'macaddr IN(SELECT macaddr FROM networks)'
+                )
+            );
+            if ($this->_networkDevicesIdentified->select(array('type' => $description))->count()) {
+                throw new \RuntimeException('Network device type still in use: ' . $description);
+            }
+            if ($this->_networkDeviceTypes->delete(array('name' => $description)) != 1) {
+                throw new \RuntimeException('Network device type does not exist: ' . $description);
+            }
 
-        $this->_networkDevicesIdentified->delete(
-            array(
-                'type' => $description,
-                'macaddr IN(SELECT macaddr FROM networks)'
-            )
-        );
-        if ($this->_networkDevicesIdentified->select(array('type' => $description))->count()) {
+            $connection->commit();
+        } catch (\Exception $e) {
             $connection->rollback();
-            throw new \RuntimeException('Network device type still in use: ' . $description);
+            throw $e;
         }
-        if ($this->_networkDeviceTypes->delete(array('name' => $description)) != 1) {
-            $connection->rollback();
-            throw new \RuntimeException('Network device type does not exist: ' . $description);
-        }
-
-        $connection->commit();
     }
 }

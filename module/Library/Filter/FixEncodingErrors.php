@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Fix effects of incorrect charset conversion by old agents
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -34,7 +35,7 @@ namespace Library\Filter;
  * their original counterparts. It's safe to apply this filter to arbitrary
  * UTF-8 strings, even if it's not affected by the bug.
  */
-class FixEncodingErrors implements \Zend\Filter\FilterInterface
+class FixEncodingErrors extends \Laminas\Filter\AbstractFilter
 {
     /**
      * UTF-8 sequences of characters to replace

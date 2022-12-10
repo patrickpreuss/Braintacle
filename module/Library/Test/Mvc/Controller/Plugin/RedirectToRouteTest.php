@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for RedirectToRoute controller plugin
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -34,9 +35,9 @@ class RedirectToRouteTest extends AbstractTest
      */
     public function testInvoke()
     {
-        $plugin = $this->_getPlugin();
+        $plugin = $this->getPlugin();
         $response = $plugin('testedcontroller', 'testedaction');
-        $this->assertInstanceOf('Zend\Http\Response', $response);
+        $this->assertInstanceOf('Laminas\Http\Response', $response);
         $this->assertEquals(302, $response->getStatusCode());
         $this->assertEquals(
             '/module/testedcontroller/testedaction/',

@@ -5,7 +5,7 @@
         {
             "name": "netid",
             "type": "varchar",
-            "length": 15,
+            "length": 45,
             "notnull": true,
             "default": null,
             "autoincrement": false,
@@ -28,6 +28,15 @@
             "default": null,
             "autoincrement": false,
             "comment": null
+        },
+        {
+            "name": "tag",
+            "type": "varchar",
+            "length": 255,
+            "notnull": false,
+            "default": null,
+            "autoincrement": false,
+            "comment": null
         }
     ],
     "primary_key": [
@@ -35,6 +44,6 @@
         "mask"
     ],
     "mysql": {
-        "engine": "MyISAM"
+        "engine": "InnoDB"
     }
 }

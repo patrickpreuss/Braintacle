@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Validate string to be a path to a writable directory
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,12 +25,18 @@ namespace Library\Validator;
 /**
  * Validate string to be a path to a writable directory
  */
-class DirectoryWritable extends \Zend\Validator\AbstractValidator
+class DirectoryWritable extends \Laminas\Validator\AbstractValidator
 {
+    /**
+     * Key for message template: not a directory or inaccessible
+     */
     const DIRECTORY = 'directory';
+
+    /**
+     * Key for message template: directory not writable
+     */
     const WRITABLE = 'writable';
 
-    // @codingStandardsIgnoreStart
     /**
      * Validation failure message template definitions
      * @var string[]
@@ -38,10 +45,6 @@ class DirectoryWritable extends \Zend\Validator\AbstractValidator
         self::DIRECTORY => "'%value%' is not a directory or inaccessible",
         self::WRITABLE => "Directory '%value%' is not writable",
     );
-
-    /** {@inheritdoc} */
-    protected static $defaultTranslatorTextDomain = 'default';
-    // @codingStandardsIgnoreEnd
 
     /**
      * Returns true if $value is a directory and writable

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "netmap" table
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -19,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-Namespace Database\Table;
+namespace Database\Table;
 
 /**
  * "netmap" table
@@ -30,11 +31,11 @@ class NetworkDevicesScanned extends \Database\AbstractTable
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function __construct(\Zend\ServiceManager\ServiceLocatorInterface $serviceLocator)
+    public function __construct(\Laminas\ServiceManager\ServiceLocatorInterface $serviceLocator)
     {
         $this->table = 'netmap';
 
-        $this->_hydrator = new \Zend\Stdlib\Hydrator\ArraySerializable;
+        $this->_hydrator = new \Laminas\Hydrator\ArraySerializableHydrator();
         $this->_hydrator->setNamingStrategy(
             new \Database\Hydrator\NamingStrategy\MapNamingStrategy(
                 array(
@@ -48,19 +49,20 @@ class NetworkDevicesScanned extends \Database\AbstractTable
             )
         );
 
-        $dateTimeFormatter = new \Zend\Stdlib\Hydrator\Strategy\DateTimeFormatterStrategy(
+        $dateTimeFormatter = new \Laminas\Hydrator\Strategy\DateTimeFormatterStrategy(
             $serviceLocator->get('Database\Nada')->timestampFormatPhp(),
             new \DateTimeZone('UTC')
         );
         $this->_hydrator->addStrategy('DiscoveryDate', $dateTimeFormatter);
         $this->_hydrator->addStrategy('date', $dateTimeFormatter);
 
-        $macAddress = new \Library\Hydrator\Strategy\MacAddress;
+        $macAddress = new \Library\Hydrator\Strategy\MacAddress();
         $this->_hydrator->addStrategy('MacAddress', $macAddress);
         $this->_hydrator->addStrategy('mac', $macAddress);
 
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
-            $this->_hydrator, $serviceLocator->get('Model\Network\Device')
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
+            $this->_hydrator,
+            $serviceLocator->get('Model\Network\Device')
         );
         parent::__construct($serviceLocator);
     }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Base class for controller plugin tests
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,29 +22,57 @@
 
 namespace Library\Test\Mvc\Controller\Plugin;
 
-use \Library\Application;
+use Laminas\Http\Response;
+use Laminas\Mvc\Controller\AbstractActionController;
+use Laminas\Mvc\Controller\Plugin\PluginInterface;
+use Laminas\Mvc\MvcEvent;
+use Laminas\Router\Http\Segment;
+use Laminas\Router\Http\TreeRouteStack;
+use Laminas\Router\RouteMatch;
 
 /**
  * Base class for controller plugin tests
  *
  * Tests for controller plugin classes can derive from this class for some
  * convenience functions. Additionally, the testPluginInterface() test is
- * executed for all derived tests. 
-*/
-abstract class AbstractTest extends \PHPUnit_Framework_TestCase
+ * executed for all derived tests.
+ */
+abstract class AbstractTest extends \PHPUnit\Framework\TestCase
 {
     /**
+     * Service manager
+     * @var \Laminas\ServiceManager\ServiceManager
+     */
+    protected static $_serviceManager;
+
+    /**
      * Controller used for tests, if set by _getPlugin()
-     * @var \Zend\Stdlib\DispatchableInterface
+     * @var \Laminas\Stdlib\DispatchableInterface
      */
     protected $_controller;
+
+    public static function setUpBeforeClass(): void
+    {
+        $module = strtok(get_called_class(), '\\');
+        $application = \Library\Application::init($module);
+        static::$_serviceManager = $application->getServiceManager();
+        static::$_serviceManager->setService(
+            'Library\UserConfig',
+            array(
+                'debug' => array(
+                    'display backtrace' => true,
+                    'report missing translations' => true,
+                ),
+            )
+        );
+    }
 
     /**
      * Get the name of the controller plugin, derived from the test class name
      *
      * @return string Plugin name
      */
-    protected function _getPluginName()
+    protected function getPluginName()
     {
         // Derive plugin name from test class name (minus namespace and 'Test' suffix)
         return substr(strrchr(get_class($this), '\\'), 1, -4);
@@ -52,71 +81,52 @@ abstract class AbstractTest extends \PHPUnit_Framework_TestCase
     /**
      * Get the application's configured controller plugin manager
      *
-     * @return \Zend\Mvc\Controller\PluginManager
+     * @return \Laminas\Mvc\Controller\PluginManager
      */
-    protected function _getPluginManager()
+    protected function getPluginManager()
     {
-        return Application::getService('ControllerPluginManager');
+        return static::$_serviceManager->get('ControllerPluginManager');
     }
 
     /**
      * Get an initialized instance of the controller plugin
      *
-     * If controller setup is requested, the controller will be a
-     * \Library\Test\Mvc\Controller\TestController. Its MvcEvent will be
-     * initialized with a standard route 'test' (/module/controller/action/)
-     * with defaults of "defaultcontroller" and "defaultaction".
-     * The RouteMatch is initialized with "currentcontroller" and
-     * "currentaction". An empty response is created.
-     *
-     * @param bool $setController Initialize the helper with a working controller (default: TRUE)
-     * @return \Zend\Mvc\Controller\Plugin\PluginInterface Plugin instance
+     * The controller will be a \Laminas\Mvc\Controller\AbstractActionController
+     * mock. Its MvcEvent will be initialized with a standard route 'test'
+     * (/module/controller/action/) with defaults of "defaultcontroller" and
+     * "defaultaction". An empty response is created.
      */
-    protected function _getPlugin($setController=true)
+    protected function getPlugin(): callable
     {
-        if ($setController) {
-            $router = new \Zend\Mvc\Router\Http\TreeRouteStack;
-            $router->addRoute(
-                'test',
-                \Zend\Mvc\Router\Http\Segment::factory(
-                    array(
-                        // Match "module" prefix, followed by controller and action
-                        // names. All three components are optional except the
-                        // controller, which is required if an action is given.
-                        // Matches with or without trailing slash.
-                        'route' => '/[module[/]][:controller[/][:action[/]]]',
-                        'defaults' => array(
-                            'controller' => 'defaultcontroller',
-                            'action' => 'defaultaction',
-                        ),
-                    )
-                )
-            );
+        $router = new TreeRouteStack();
+        $router->addRoute(
+            'test',
+            Segment::factory([
+                // Match "module" prefix, followed by controller and action
+                // names. All three components are optional except the
+                // controller, which is required if an action is given. Matches
+                // with or without trailing slash.
+                'route' => '/[module[/]][:controller[/][:action[/]]]',
+                'defaults' => [
+                    'controller' => 'defaultcontroller',
+                    'action' => 'defaultaction',
+                ],
+            ])
+        );
 
-            $routeMatch = new \Zend\Mvc\Router\RouteMatch(
-                array(
-                    'controller' => 'currentcontroller',
-                    'action' => 'currentaction',
-                )
-            );
-            $routeMatch->setMatchedRouteName('test');
+        $routeMatch = new RouteMatch([]);
+        $routeMatch->setMatchedRouteName('test');
 
-            $event = new \Zend\Mvc\MvcEvent;
-            $event->setRouter($router);
-            $event->setRouteMatch($routeMatch);
-            $event->setResponse(new \Zend\Http\Response);
+        $event = new MvcEvent();
+        $event->setRouter($router);
+        $event->setRouteMatch($routeMatch);
+        $event->setResponse(new Response());
 
-            // Register TestController with the service manager because this is
-            // not done in the module setup
-            $manager = Application::getService('ControllerManager');
-            $manager->setInvokableClass('test', 'Library\Test\Mvc\Controller\TestController');
-            $this->_controller = $manager->get('test');
-            $this->_controller->setEvent($event);
+        $this->_controller = $this->getMockForAbstractClass(AbstractActionController::class);
+        $this->_controller->setPluginManager($this->getPluginManager());
+        $this->_controller->setEvent($event);
 
-            return $this->_controller->plugin($this->_getPluginName());
-        } else {
-            return $this->_getPluginManager()->get($this->_getPluginName());
-        }
+        return $this->_controller->plugin($this->getPluginName());
     }
 
     /**
@@ -124,10 +134,10 @@ abstract class AbstractTest extends \PHPUnit_Framework_TestCase
      */
     public function testPluginInterface()
     {
-        // Test if the plugin is registered with the application's service manager
-        $this->assertTrue($this->_getPluginManager()->has($this->_getPluginName()));
-
-        // Get plugin instance through service manager and test for required interface
-        $this->assertInstanceOf('Zend\Mvc\Controller\Plugin\PluginInterface', $this->_getPlugin(false));
+        $class = substr(str_replace('\Test', '', get_called_class()), 0, -4);
+        // Uppercase
+        $this->assertInstanceOf($class, $this->getPluginManager()->get($this->getPluginName()));
+        // Lowercase
+        $this->assertInstanceOf($class, $this->getPluginManager()->get(lcfirst($this->getPluginName())));
     }
 }

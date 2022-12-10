@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Package assignment on a client
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,14 +22,12 @@
 
 namespace Model\Package;
 
+use DateTimeInterface;
+
 /**
  * Package assignment on a client
- *
- * @property string $PackageName Package name
- * @property string $Status Status
- * @property \DateTime $Timestamp Timestamp of last status change
  */
-class Assignment extends \ArrayObject
+class Assignment
 {
     /**
      * Database-internal date format
@@ -44,14 +43,14 @@ class Assignment extends \ArrayObject
     const DATEFORMAT = 'D M d H:i:s Y';
 
     /**
-     * Database value for status "not notified"
+     * Database value for status "pending"
      */
-    const NOT_NOTIFIED = null;
+    const PENDING = null;
 
     /**
-     * Database value for status "notified"
+     * Database value for status "running"
      */
-    const NOTIFIED = 'NOTIFIED';
+    const RUNNING = 'NOTIFIED';
 
     /**
      * Database value for status "success"
@@ -62,4 +61,19 @@ class Assignment extends \ArrayObject
      * Prefix of database value for error status
      */
     const ERROR_PREFIX = 'ERR';
+
+    /**
+     * Package name
+     */
+    public string $packageName;
+
+    /**
+     * Status (PENDING/RUNNUNG/SUCCESS/ERR_*)
+     */
+    public ?string $status;
+
+    /**
+     * Timestamp of last status change
+     */
+    public DateTimeInterface $timestamp;
 }

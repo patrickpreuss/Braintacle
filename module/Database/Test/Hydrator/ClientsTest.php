@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for Clients hydrator
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,16 +22,22 @@
 
 namespace Database\Test\Hydrator;
 
-require_once 'Database.php'; // from NADA path
+use Database\AbstractTable;
+use Database\Table\WindowsInstallations;
+use Laminas\Db\ResultSet\HydratingResultSet;
+use Laminas\ServiceManager\ServiceLocatorInterface;
+use Model\Client\CustomFieldManager;
+use Model\Client\ItemManager;
+use PHPUnit\Framework\MockObject\Stub;
 
 class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
 {
-    protected function _getHydrator()
+    protected function getHydrator()
     {
-        $nada = $this->getMockBuilder('Nada_Database')->disableOriginalConstructor()->getMockForAbstractClass();
+        $nada = $this->createMock('Nada\Database\AbstractDatabase');
         $nada->method('timestampFormatPhp')->willReturn('Y-m-d H:i:s');
 
-        $hydrator = $this->getMock('Zend\Stdlib\Hydrator\ArraySerializable');
+        $hydrator = $this->createMock(\Laminas\Hydrator\AbstractHydrator::class);
         $hydrator->method('hydrateName')->willReturnMap(
             array(
                 array('fields_3', null, 'Custom field'),
@@ -46,29 +53,20 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             )
         );
 
-        $customFieldManager = $this->getMockBuilder('Model\Client\CustomFieldManager')
-                                   ->disableOriginalConstructor()
-                                   ->getMock();
+        $customFieldManager = $this->createMock(CustomFieldManager::class);
         $customFieldManager->method('getHydrator')->willReturn($hydrator);
 
-        $windowsInstallations = $this->getMockBuilder('Database\Table\WindowsInstallations')
-                                     ->disableOriginalConstructor()
-                                     ->getMock();
+        $windowsInstallations = $this->createMock(WindowsInstallations::class);
         $windowsInstallations->method('getHydrator')->willReturn($hydrator);
 
-        $resultSet = $this->getMockBuilder('Zend\Db\ResultSet\AbstractResultSet')
-                          ->setMethods(array('getObjectPrototype'))
-                          ->getMockForAbstractClass();
+        $resultSet = $this->createStub(HydratingResultSet::class);
         $resultSet->method('getObjectPrototype')->willReturn($this);
 
-        $itemTable = $this->getMockBuilder('Database\AbstractTable')
-                          ->disableOriginalConstructor()
-                          ->setMethods(array('getResultSetPrototype', 'getHydrator'))
-                          ->getMockForAbstractClass();
+        $itemTable = $this->createStub(AbstractTable::class);
         $itemTable->method('getResultSetPrototype')->willReturn($resultSet);
         $itemTable->method('getHydrator')->willReturn($hydrator);
 
-        $itemManager = $this->getMockBuilder('Model\Client\ItemManager')->disableOriginalConstructor()->getMock();
+        $itemManager = $this->createMock(ItemManager::class);
         $itemManager->method('getTable')->willReturnMap(
             array(
                 array('item', $itemTable),
@@ -76,13 +74,14 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             )
         );
 
-        $serviceManager = $this->getMock('Zend\ServiceManager\ServiceManager');
+        /** @var Stub|ServiceLocatorInterface */
+        $serviceManager = $this->createStub(ServiceLocatorInterface::class);
         $serviceManager->method('get')->willReturnMap(
             array(
-                array('Database\Nada', true, $nada),
-                array('Database\Table\WindowsInstallations', true, $windowsInstallations),
-                array('Model\Client\CustomFieldManager', true, $customFieldManager),
-                array('Model\Client\ItemManager', true, $itemManager),
+                array('Database\Nada', $nada),
+                array('Database\Table\WindowsInstallations', $windowsInstallations),
+                array('Model\Client\CustomFieldManager', $customFieldManager),
+                array('Model\Client\ItemManager', $itemManager),
             )
         );
 
@@ -109,9 +108,8 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'ipaddr' => '192.0.2.2',
             'lastcome' => '2015-08-30 09:02:03',
             'smanufacturer' => 'Manufacturer',
-            'smodel' => 'Model',
+            'smodel' => 'Product name',
             'name' => 'Name',
-            'useragent' => 'User Agent',
             'description' => 'Os Comment',
             'osname' => "Os Name\xC2\x99",
             'osversion' => 'Os Version Number',
@@ -120,6 +118,7 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'ssn' => 'Serial',
             'swap' => 3000,
             'type' => 'Type',
+            'useragent' => 'User Agent',
             'userid' => 'User_Name',
             'uuid' => 'Uuid',
             'package_status' => 'ERR_STATUS',
@@ -135,7 +134,7 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'BiosDate' => 'Bios Date',
             'BiosManufacturer' => 'Bios Manufacturer',
             'BiosVersion' => 'Bios Version',
-            'ClientId' => 'Client Id',
+            'IdString' => 'Client Id',
             'CpuClock' => 2000,
             'CpuCores' => 2,
             'CpuType' => 'Cpu Type',
@@ -147,17 +146,17 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'IpAddress' => '192.0.2.2',
             'LastContactDate' => new \DateTime('2015-08-30 11:02:03+02:00'),
             'Manufacturer' => 'Manufacturer',
-            'Model' => 'Model',
             'Name' => 'Name',
-            'OcsAgent' => 'User Agent',
             'OsComment' => 'Os Comment',
             'OsName' => "Os Name\xE2\x84\xA2",
             'OsVersionNumber' => 'Os Version Number',
             'OsVersionString' => 'Os Version String',
             'PhysicalMemory' => 2048,
+            'ProductName' => 'Product name',
             'Serial' => 'Serial',
             'SwapMemory' => 3000,
             'Type' => 'Type',
+            'UserAgent' => 'User Agent',
             'UserName' => 'User_Name',
             'Uuid' => 'Uuid',
             'Package.Status' => 'ERR_STATUS',
@@ -178,7 +177,7 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'BiosDate' => 'Bios Date',
             'BiosManufacturer' => 'Bios Manufacturer',
             'BiosVersion' => 'Bios Version',
-            'ClientId' => 'Client Id',
+            'IdString' => 'Client Id',
             'CpuClock' => 2000,
             'CpuCores' => 2,
             'CpuType' => 'Cpu Type',
@@ -190,17 +189,17 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'IpAddress' => '192.0.2.2',
             'LastContactDate' => new \DateTime('2015-08-30 11:02:03'),
             'Manufacturer' => 'Manufacturer',
-            'Model' => 'Model',
             'Name' => 'Name',
-            'OcsAgent' => 'User Agent',
             'OsComment' => 'Os Comment',
             'OsName' => "Os Name\xE2\x84\xA2",
             'OsVersionNumber' => 'Os Version Number',
             'OsVersionString' => 'Os Version String',
             'PhysicalMemory' => 2048,
+            'ProductName' => 'Product name',
             'Serial' => 'Serial',
             'SwapMemory' => 3000,
             'Type' => 'Type',
+            'UserAgent' => 'User Agent',
             'UserName' => 'User_Name',
             'Uuid' => 'Uuid',
         );
@@ -222,9 +221,8 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'ipaddr' => '192.0.2.2',
             'lastcome' => '2015-08-30 09:02:03',
             'smanufacturer' => 'Manufacturer',
-            'smodel' => 'Model',
+            'smodel' => 'Product name',
             'name' => 'Name',
-            'useragent' => 'User Agent',
             'description' => 'Os Comment',
             'osname' => "Os Name\xE2\x84\xA2",
             'osversion' => 'Os Version Number',
@@ -233,6 +231,7 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'ssn' => 'Serial',
             'swap' => 3000,
             'type' => 'Type',
+            'useragent' => 'User Agent',
             'userid' => 'User_Name',
             'uuid' => 'Uuid',
         );
@@ -247,7 +246,7 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'BiosDate' => 'bdate',
             'BiosManufacturer' => 'bmanufacturer',
             'BiosVersion' => 'bversion',
-            'ClientId' => 'deviceid',
+            'IdString' => 'deviceid',
             'CpuClock' => 'processors',
             'CpuCores' => 'processorn',
             'CpuType' => 'processort',
@@ -259,32 +258,34 @@ class ClientsTest extends \Library\Test\Hydrator\AbstractHydratorTest
             'IpAddress' => 'ipaddr',
             'LastContactDate' => 'lastcome',
             'Manufacturer' => 'smanufacturer',
-            'Model' => 'smodel',
             'Name' => 'name',
-            'OcsAgent' => 'useragent',
             'OsComment' => 'description',
             'OsName' => 'osname',
             'OsVersionNumber' => 'osversion',
             'OsVersionString' => 'oscomments',
             'PhysicalMemory' => 'memory',
+            'ProductName' => 'smodel',
             'Serial' => 'ssn',
             'SwapMemory' => 'swap',
             'Type' => 'type',
+            'UserAgent' => 'useragent',
             'UserName' => 'userid',
             'Uuid' => 'uuid',
         );
-        $this->assertEquals($expected, $this->_getHydrator()->getExtractorMap());
+        $this->assertEquals($expected, $this->getHydrator()->getExtractorMap());
     }
 
     public function testHydrateNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot hydrate name: invalid_');
-        $this->_getHydrator()->hydrateName('invalid_');
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot hydrate name: invalid_');
+        $this->getHydrator()->hydrateName('invalid_');
     }
 
     public function testExtractNameInvalid()
     {
-        $this->setExpectedException('DomainException', 'Cannot extract name: invalid');
-        $this->_getHydrator()->extractName('invalid');
+        $this->expectException('DomainException');
+        $this->expectExceptionMessage('Cannot extract name: invalid');
+        $this->getHydrator()->extractName('invalid');
     }
 }

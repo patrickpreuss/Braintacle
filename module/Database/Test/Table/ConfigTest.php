@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Tests for the Config class
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -32,7 +33,7 @@ class ConfigTest extends AbstractTest
     public function testGetDbIdentifier()
     {
         $this->assertEquals('FREQUENCY', static::$_table->getDbIdentifier('inventoryInterval'));
-        $this->setExpectedException('InvalidArgumentException');
+        $this->expectException('InvalidArgumentException');
         static::$_table->getDbIdentifier('Invalid');
     }
 
@@ -50,7 +51,7 @@ class ConfigTest extends AbstractTest
         // Test unpopulated option
         $this->assertNull(static::$_table->get('contactInterval'));
         // Test invalid option
-        $this->setExpectedException('InvalidArgumentException');
+        $this->expectException('InvalidArgumentException');
         static::$_table->get('invalid');
     }
 
@@ -64,7 +65,7 @@ class ConfigTest extends AbstractTest
         $this->assertSame(true, static::$_table->set('sessionRequired', true)); // ivalue true, new
         $this->assertSame(true, static::$_table->set('trustedNetworksOnly', false)); // ivalue false, new
         $this->assertTablesEqual(
-            $this->_loadDataSet('Set')->getTable('config'),
+            $this->loadDataSet('Set')->getTable('config'),
             $this->getConnection()->createQueryTable('config', 'SELECT * FROM config ORDER BY name')
         );
     }
@@ -73,20 +74,39 @@ class ConfigTest extends AbstractTest
     {
         static::$_table->set('scannersPerSubnet', '');
         $this->assertTablesEqual(
-            $this->_loadDataSet('SetIntegerEmptyStringToNull')->getTable('config'),
+            $this->loadDataSet('SetIntegerEmptyStringToNull')->getTable('config'),
             $this->getConnection()->createQueryTable('config', 'SELECT * FROM config ORDER BY name')
+        );
+    }
+
+    public function testSetStringColumnFromBooleanFalse()
+    {
+        static::$_table->set('defaultWarn', false);
+        $this->assertSame(
+            '0',
+            static::$_table->select(array('name' => 'BRAINTACLE_DEFAULT_WARN'))->current()['tvalue']
+        );
+    }
+
+    public function testSetStringColumnFromBooleanTrue()
+    {
+        static::$_table->set('defaultWarn', true);
+        $this->assertSame(
+            '1',
+            static::$_table->select(array('name' => 'BRAINTACLE_DEFAULT_WARN'))->current()['tvalue']
         );
     }
 
     public function testSetInvalidOption()
     {
-        $this->setExpectedException('InvalidArgumentException', 'Invalid option: invalid');
+        $this->expectException('InvalidArgumentException');
+        $this->expectExceptionMessage('Invalid option: invalid');
         static::$_table->set('invalid', 0);
     }
 
     public function testSetInvalidValue()
     {
-        $this->setExpectedException(
+        $this->expectException(
             'InvalidArgumentException',
             'Tried to set non-integer value "invalid" to integer option "inventoryInterval"'
         );
@@ -132,7 +152,7 @@ class ConfigTest extends AbstractTest
         static::$_table->set('limitInventoryInterval', '0');
         $this->assertSame(
             '0',
-            static::$_table->select(array('name' => 'INVENTORY_FILTER_FLOOD_IP'))->current()['ivalue']
+            (string) static::$_table->select(array('name' => 'INVENTORY_FILTER_FLOOD_IP'))->current()['ivalue']
         );
     }
 
@@ -141,7 +161,7 @@ class ConfigTest extends AbstractTest
         static::$_table->set('limitInventoryInterval', '42');
         $this->assertSame(
             '1',
-            static::$_table->select(array('name' => 'INVENTORY_FILTER_FLOOD_IP'))->current()['ivalue']
+            (string) static::$_table->select(array('name' => 'INVENTORY_FILTER_FLOOD_IP'))->current()['ivalue']
         );
     }
 }

@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Strategy for Size attribute
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -24,22 +25,24 @@ namespace Database\Hydrator\Strategy\MemorySlots;
 /**
  * Strategy for Size attribute
  *
- * Some agents report non-numeric values which are converted to 0 to allow
- * calculations. This conversion is not reverted on extraction.
+ * Some agents report 0 or non-integer values which are converted to NULL. This
+ * conversion is not reverted on extraction.
  */
-class Size implements \Zend\Stdlib\Hydrator\Strategy\StrategyInterface
+class Size implements \Laminas\Hydrator\Strategy\StrategyInterface
 {
     /** {@inheritdoc} */
-    public function hydrate($value)
+    public function hydrate($value, ?array $data)
     {
-        if (!is_numeric($value)) {
-            $value = 0;
+        if (ctype_digit((string) $value) and $value != 0) {
+            $value = (int) $value;
+        } else {
+            $value = null;
         }
         return $value;
     }
 
     /** {@inheritdoc} */
-    public function extract($value)
+    public function extract($value, ?object $object = null)
     {
         return $value;
     }

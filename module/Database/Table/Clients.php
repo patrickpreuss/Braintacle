@@ -1,8 +1,9 @@
 <?php
+
 /**
  * "clients" view
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -37,18 +38,19 @@ class Clients extends \Database\AbstractTable
     public function initialize()
     {
         $this->_hydrator = new \Database\Hydrator\Clients($this->_serviceLocator);
-        $this->resultSetPrototype = new \Zend\Db\ResultSet\HydratingResultSet(
+        $this->resultSetPrototype = new \Laminas\Db\ResultSet\HydratingResultSet(
             $this->_hydrator,
             $this->_serviceLocator->get('Model\Client\Client')
         );
-        return parent::initialize();
+
+        parent::initialize();
     }
 
     /**
      * {@inheritdoc}
      * @codeCoverageIgnore
      */
-    public function setSchema()
+    public function updateSchema($prune = false)
     {
         // Reimplementation to provide a view
         $logger = $this->_serviceLocator->get('Library\Logger');
@@ -80,7 +82,7 @@ class Clients extends \Database\AbstractTable
                     'useragent',
                     'checksum',
                     'ipaddr', // deprecated
-                    'dns_domain' => new \Zend\Db\Sql\Literal(
+                    'dns_domain' => new \Laminas\Db\Sql\Literal(
                         'CASE WHEN winprodid IS NULL THEN workgroup ELSE NULL END'
                     )
                 ),
@@ -89,8 +91,8 @@ class Clients extends \Database\AbstractTable
                 'bios',
                 'hardware_id = id',
                 array('smanufacturer', 'smodel', 'ssn', 'assettag', 'type', 'bversion', 'bdate', 'bmanufacturer'),
-                \Zend\Db\Sql\Select::JOIN_LEFT
-            )->where(new \Zend\Db\Sql\Predicate\Operator('deviceid', '!=', '_SYSTEMGROUP_'));
+                \Laminas\Db\Sql\Select::JOIN_LEFT
+            )->where(new \Laminas\Db\Sql\Predicate\Operator('deviceid', '!=', '_SYSTEMGROUP_'));
 
             $database->createView('clients', $sql->buildSqlString($select));
             $logger->info('done.');

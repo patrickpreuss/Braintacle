@@ -1,8 +1,9 @@
 <?php
+
 /**
  * Render a SelectSimple element
  *
- * Copyright (C) 2011-2015 Holger Schletz <holger.schletz@web.de>
+ * Copyright (C) 2011-2022 Holger Schletz <holger.schletz@web.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -27,16 +28,15 @@ namespace Library\View\Helper;
  * The option values are not translated, just like the "value" attributes of
  * Select elements.
  */
-class FormSelectSimple extends \Zend\Form\View\Helper\FormSelect
+class FormSelectSimple extends \Laminas\Form\View\Helper\FormSelect
 {
-    /** {@inheritdoc} */
-    public function renderOptions(array $options, array $selectedOptions = array())
+    public function renderOptions(array $options, array $selectedOptions = []): string
     {
         $escapeHtml    = $this->getEscapeHtmlHelper();
         $optionStrings = array();
         foreach ($options as $option) {
             $this->validTagAttributes = $this->validOptionAttributes;
-            if (\Zend\Stdlib\ArrayUtils::inArray($option, $selectedOptions)) {
+            if (\Laminas\Stdlib\ArrayUtils::inArray($option, $selectedOptions)) {
                 $attributes = ' selected="selected"';
             } else {
                 $attributes = '';
